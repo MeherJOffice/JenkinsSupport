@@ -717,6 +717,33 @@ stage('Copy Plugin Files to Unity Project') {
             }
         }
 
+        stage('Copy functionsMap.json to Cocos Build') {
+    when {
+        expression { params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2' }
+    }
+    steps {
+        script {
+            def productName = sh(
+                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
+                returnStdout: true
+            ).trim()
+
+            def buildpath = "$HOME/jenkinsBuild/${productName}"
+            def sourceJsonPath = "${params.PLUGINS_PROJECT_PATH}/functionsMap.json"
+            def targetJsonPath = "${buildpath}/functionsMap.json"
+
+            if (!fileExists(sourceJsonPath)) {
+                error "❌ Missing functionsMap.json at: ${sourceJsonPath}"
+            }
+
+            echo "📁 Copying functionsMap.json to ${targetJsonPath}"
+            sh "cp '${sourceJsonPath}' '${targetJsonPath}'"
+            echo "✅ functionsMap.json copied successfully."
+        }
+    }
+}
+
+
         stage('📂 Open Game Build Folder') {
             steps {
                 script {
