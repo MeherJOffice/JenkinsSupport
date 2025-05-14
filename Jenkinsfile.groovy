@@ -73,9 +73,10 @@ pipeline {
 
                     def fe2inScript = "${params.PLUGINS_PROJECT_PATH}/unityProj/Assets/Scripts/FE2In.cs"
                     def fe2inPy = "${fe2inScript}.py"
+                    def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
 
                     // Copy the Python script next to the C# script
-                    sh "cp '${params.PLUGINS_PROJECT_PATH}/Python/PreprocessFE2In.py' '${fe2inPy}'"
+                    sh "cp '${jenkinsfiles}/Python/PreprocessFE2In.py' '${fe2inPy}'"
 
                     // Run the Python script
                     sh """
@@ -112,10 +113,11 @@ pipeline {
                     def tsFilePath = "${params.PLUGINS_PROJECT_PATH}/BootUnity213/assets/LoadScene/CheckStatus.ts"
                     def override = params.COCOS_OVERRIDE_VALUE
                     def testingFlag = params.TESTING.toString().toLowerCase()
+                    def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
 
                     sh """
                 source '${venvPath}/bin/activate' && \
-                python3 '${params.PLUGINS_PROJECT_PATH}/Python/PreprocessCheckStatus.py' '${tsFilePath}' '${override}' '${testingFlag}'
+                python3 '${jenkinsfiles}/Python/PreprocessCheckStatus.py' '${tsFilePath}' '${override}' '${testingFlag}'
             """
 
                     if (params.COCOS_VERSION == 'cocos2') {
@@ -256,12 +258,13 @@ pipeline {
 
                     echo "📦 Product Name: ${productName}"
                     echo "🔐 Bundle ID: ${bundleId}"
+                    def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
 
-                    def pythonFile = "${params.COCOS_PROJECT_PATH}/SetupCocosBuildSettings.py"
+                    def pythonFile = "${jenkinsfiles}/SetupCocosBuildSettings.py"
                     def cocosProject = params.COCOS_PROJECT_PATH
 
                     // Copy Python script into project
-                    sh "cp '${params.PLUGINS_PROJECT_PATH}/Python/SetupCocosBuildSettings.py' '${pythonFile}'"
+                    sh "cp '${jenkinsfiles}/Python/SetupCocosBuildSettings.py' '${pythonFile}'"
 
                     // Execute script
                     sh """
@@ -326,6 +329,16 @@ stage('Copy Plugin Files to Unity Project') {
                 error "❌ Could not determine SCRIPT_TO_PATCH!"
             }
 
+            def editorfiles = "${env.WORKSPACE}/JenkinsFiles/UnityScripts/Editor"
+
+            def editorTarget = "${params.UNITY_PROJECT_PATH}/Assets/Scripts/Editor"
+
+            echo "📂 Copying Editor scripts from ${editorFiles} to ${editorTarget}"
+            sh """
+                mkdir -p '${editorTarget}'
+                rsync -av --exclude='*.meta' '${editorFiles}/' '${editorTarget}/'
+            """
+            
             env.SCRIPT_TO_PATCH = unityScriptPath
             echo "📌 SCRIPT_TO_PATCH set to: ${env.SCRIPT_TO_PATCH}"
             echo '🎉 All plugin folders copied successfully and SCRIPT_TO_PATCH is set.'
@@ -597,6 +610,8 @@ stage('Copy Plugin Files to Unity Project') {
                 returnStdout: true
             ).trim()
 
+            def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
+
             def targetBuildFolder = "${env.HOME_DIR}/jenkinsBuild/${productName}"
             def patchScript = 'updateUnityXcodeProj.go'
             def privacyFile = 'PrivacyInfo.xcprivacy'
@@ -604,8 +619,8 @@ stage('Copy Plugin Files to Unity Project') {
             sh """
                 set +e
                 mkdir -p '${targetBuildFolder}'
-                cp '${params.PLUGINS_PROJECT_PATH}/Golang/${patchScript}' '${targetBuildFolder}/'
-                cp '${params.PLUGINS_PROJECT_PATH}/${privacyFile}' '${targetBuildFolder}/'
+                cp '${jenkinsfiles}/Golang/${patchScript}' '${targetBuildFolder}/'
+                cp '${jenkinsfiles}/${privacyFile}' '${targetBuildFolder}/'
                 cd '${targetBuildFolder}'
                 go mod init patchproject
                 go get howett.net/plist
@@ -641,8 +656,9 @@ stage('Copy Plugin Files to Unity Project') {
                         error "❌ Virtual environment 'pbxproj-env' not found!"
                     }
                     echo "✅ Found VENV at: ${venvPath}"
+                    def pythonfiles = "${env.WORKSPACE}/JenkinsFiles/Python"
 
-                    def sourcePyScript = "${params.PLUGINS_PROJECT_PATH}/Python/SetupXcodeWorkspace.py"
+                    def sourcePyScript = "${pythonfiles}/Python/SetupXcodeWorkspace.py"
                     def targetFolder = "${params.UNITY_PROJECT_PATH}/unityBuild"
                     def copiedScript = "${targetFolder}/SetupXcodeWorkspace.py"
 
