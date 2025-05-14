@@ -658,7 +658,7 @@ stage('Copy Plugin Files to Unity Project') {
                     echo "✅ Found VENV at: ${venvPath}"
                     def pythonfiles = "${env.WORKSPACE}/JenkinsFiles/Python"
 
-                    def sourcePyScript = "${pythonfiles}/Python/SetupXcodeWorkspace.py"
+                    def sourcePyScript = "${pythonfiles}/SetupXcodeWorkspace.py"
                     def targetFolder = "${params.UNITY_PROJECT_PATH}/unityBuild"
                     def copiedScript = "${targetFolder}/SetupXcodeWorkspace.py"
 
