@@ -3,7 +3,7 @@ pipeline {
 
     parameters {
         string(name: 'UNITY_PROJECT_PATH', defaultValue: '/Users/meher/Documents/GitHub/Games-Meher/Fact Or Lie', description: 'Local path to Unity project')
-        string(name: 'PLUGINS_PROJECT_PATH', defaultValue: '/Users/meher/Documents/GitHub/SDKForJenkins', description: 'Local path to Plugins repo')
+        string(name: 'PLUGINS_PROJECT_PATH', defaultValue: '/Users/meher/Documents/GitHub/UpStoreTools', description: 'Local path to Plugins repo')
         string(name: 'COCOS_PROJECT_PATH', defaultValue: '/Users/meher/Documents/GitHub/SDKForJenkins/JenkensCocos2unity', description: 'Cocos project path')
         text(name: 'UNITY_OVERRIDE_VALUE', defaultValue: '42', description: 'Override value for Unity')
         string(name: 'COCOS_OVERRIDE_VALUE', defaultValue: '5', description: 'Override value for Cocos')
@@ -333,10 +333,10 @@ stage('Copy Plugin Files to Unity Project') {
 
             def editorTarget = "${params.UNITY_PROJECT_PATH}/Assets/Scripts/Editor"
 
-            echo "📂 Copying Editor scripts from ${editorFiles} to ${editorTarget}"
+            echo "📂 Copying Editor scripts from ${editorfiles} to ${editorTarget}"
             sh """
                 mkdir -p '${editorTarget}'
-                rsync -av --exclude='*.meta' '${editorFiles}/' '${editorTarget}/'
+                rsync -av --exclude='*.meta' '${editorfiles}/' '${editorTarget}/'
             """
             
             env.SCRIPT_TO_PATCH = unityScriptPath
