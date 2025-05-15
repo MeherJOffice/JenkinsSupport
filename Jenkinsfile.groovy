@@ -331,7 +331,7 @@ stage('Copy Plugin Files to Unity Project') {
 
             def editorfiles = "${env.WORKSPACE}/JenkinsFiles/UnityScripts/Editor"
 
-            def editorTarget = "${params.UNITY_PROJECT_PATH}/Assets/Scripts/Editor"
+            def editorTarget = "${params.UNITY_PROJECT_PATH}/Assets/Editor"
 
             echo "📂 Copying Editor scripts from ${editorfiles} to ${editorTarget}"
             sh """
