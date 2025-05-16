@@ -96,63 +96,68 @@ pipeline {
             }
         }
 
-        stage('Preprocess CheckStatus.ts (Before Copy)') {
-            steps {
-                script {
-                    echo '⚙️ Preprocessing CheckStatus.ts with override and date...'
+stage('Preprocess CheckStatus.ts (Before Copy)') {
+    steps {
+        script {
+            echo '⚙️ Preprocessing CheckStatus.ts with override and date...'
 
-                    def venvPath = sh(
+            def venvPath = sh(
                 script: "find $HOME/.venvs -name 'pbxproj-env' -type d | head -n 1",
                 returnStdout: true
             ).trim()
 
-                    if (!venvPath) {
-                        error '❌ Python virtual environment not found!'
-                    }
+            if (!venvPath) {
+                error '❌ Python virtual environment not found!'
+            }
 
-                    def tsFilePath = "${params.PLUGINS_PROJECT_PATH}/BootUnity213/assets/LoadScene/CheckStatus.ts"
-                    def override = params.COCOS_OVERRIDE_VALUE
-                    def testingFlag = params.TESTING.toString().toLowerCase()
-                    def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
+            def tsFilePath = "${params.PLUGINS_PROJECT_PATH}/BootUnity213/assets/LoadScene/CheckStatus.ts"
+            def override = params.COCOS_OVERRIDE_VALUE
+            def testingFlag = params.TESTING.toString().toLowerCase()
+            def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
 
-                    sh """
+            // Preprocess CheckStatus.ts
+            sh """
                 source '${venvPath}/bin/activate' && \
                 python3 '${jenkinsfiles}/Python/PreprocessCheckStatus.py' '${tsFilePath}' '${override}' '${testingFlag}'
             """
 
-                   def prepareOutput = sh(
-    script: "'${params.PLUGINS_PROJECT_PATH}/BootUnity213/prepareUpStore' 2>&1",
-    returnStdout: true
-).trim()
+            // Run prepareUpStore and capture output
+            def prepareOutput = sh(
+                script: "'${params.PLUGINS_PROJECT_PATH}/BootUnity213/prepareUpStore' 2>&1",
+                returnStdout: true
+            ).trim()
 
-echo '📋 prepareUpStore output:'
-prepareOutput.readLines().each { line -> echo "│ ${line}" }
+            echo '📋 prepareUpStore output:'
+            prepareOutput.readLines().each { line -> echo "│ ${line}" }
 
-def newFileName = prepareOutput
-    .readLines()
-    .collect { line ->
-        def m = (line =~ /__updating ts file from: .*CheckStatus\.ts to .*\/?([A-Za-z0-9_]+\.ts)/)
-        return m.matches() ? m[0][1] : null
-    }
-    .find { it != null }
+            // Extract new file name safely (no persistent matcher)
+            def newFileName = null
+            for (line in prepareOutput.readLines()) {
+                def match1 = (line =~ /__updating ts file from: .*CheckStatus\.ts to .*\/([A-Za-z0-9_]+\.ts)/)
+                def match2 = (line =~ /__updating ts file from: .*CheckStatus\.ts to .*([A-Za-z0-9_]+\.ts)/)
 
-if (!newFileName) {
-    error '❌ Failed to extract new filename for CheckStatus.ts!'
-}
+                if (match1.matches()) {
+                    newFileName = match1[0][1]
+                    break
+                } else if (match2.matches()) {
+                    newFileName = match2[0][1]
+                    break
+                }
+            }
 
-echo "✅ New CheckStatus.ts filename: ${newFileName}"
+            if (!newFileName) {
+                echo '❗ Could not match CheckStatus.ts rename. Full output:'
+                prepareOutput.readLines().each { echo "  >> $it" }
+                error '❌ Failed to extract new filename for CheckStatus.ts!'
+            }
 
-            //env.NEW_CHECKSTATUS_FILENAME = newFileName
+            echo "✅ New CheckStatus.ts filename: ${newFileName}"
 
+            // Save to JSON
+            def targetBuildFolder = "${env.WORKSPACE}/jenkinsBuild"
+            def jsonFile = "${targetBuildFolder}/filenameMap.json"
 
-
-                    def targetBuildFolder = "$env.WORKSPACE/jenkinsBuild"
-
-                    // 📂 Construct output path
-                    def jsonFile = "${targetBuildFolder}/filenameMap.json"
-
-                    // 📝 Create directory & write JSON file
-                    sh """
+            sh """
                 mkdir -p '${targetBuildFolder}' && \
                 echo '{' > '${jsonFile}' && \
                 echo '  "CheckstatutName": "${newFileName}",' >> '${jsonFile}' && \
@@ -160,10 +165,11 @@ echo "✅ New CheckStatus.ts filename: ${newFileName}"
                 echo '}' >> '${jsonFile}'
             """
 
-                    echo "✅ Saved mapping file to: ${jsonFile}"
-                }
-            }
+            echo "✅ Saved mapping file to: ${jsonFile}"
         }
+    }
+}
+
 
         stage('Sync BootUnity213 for Unity + Cocos 2.1.3') {
             when {
