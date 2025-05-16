@@ -106,22 +106,18 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
                 returnStdout: true
             ).trim()
 
-            if (!venvPath) {
-                error '❌ Python virtual environment not found!'
-            }
-
             def tsFilePath = "${params.PLUGINS_PROJECT_PATH}/BootUnity213/assets/LoadScene/CheckStatus.ts"
             def override = params.COCOS_OVERRIDE_VALUE
             def testingFlag = params.TESTING.toString().toLowerCase()
             def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
 
-            // Run the Python preprocessor
+            // Run Python preprocessor
             sh """
                 source '${venvPath}/bin/activate' && \
                 python3 '${jenkinsfiles}/Python/PreprocessCheckStatus.py' '${tsFilePath}' '${override}' '${testingFlag}'
             """
 
-            // Run prepareUpStore and capture full output
+            // Run prepareUpStore
             def prepareOutput = sh(
                 script: "'${params.PLUGINS_PROJECT_PATH}/BootUnity213/prepareUpStore' 2>&1",
                 returnStdout: true
@@ -130,12 +126,10 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
             echo "📋 prepareUpStore output:"
             prepareOutput.readLines().each { line -> echo "│ ${line}" }
 
-            // Extract new filename using the full multiline string
-            def newFileName = null
-            def matcher = prepareOutput =~ /__updating ts file from: .*CheckStatus\.ts to .*\/([A-Za-z0-9_]+\.ts)/
-            if (matcher.find()) {
-                newFileName = matcher.group(1)
-            } else {
+            // Safely extract filename without keeping the Matcher
+            def newFileName = prepareOutput.replaceAll("(?s).*__updating ts file from: .*CheckStatus\\.ts to .*\\/([A-Za-z0-9_]+\\.ts).*", "\$1")
+
+            if (!newFileName || newFileName == prepareOutput) {
                 echo "❗ Could not match CheckStatus.ts rename. Full output:"
                 prepareOutput.readLines().each { line -> echo "  >> ${line}" }
                 error '❌ Failed to extract new filename for CheckStatus.ts!'
@@ -143,7 +137,7 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
 
             echo "✅ New CheckStatus.ts filename: ${newFileName}"
 
-            // Construct JSON path
+            // Save result to JSON file
             def jsonFilePath = "${env.WORKSPACE}/jenkinsBuild/filenameMap.json"
             sh """
                 mkdir -p '${env.WORKSPACE}/jenkinsBuild' && \
@@ -153,10 +147,11 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
                 echo '}' >> '${jsonFilePath}'
             """
 
-            echo "✅ Saved mapping to: ${jsonFilePath}"
+            echo "✅ Saved filenameMap.json to: ${jsonFilePath}"
         }
     }
 }
+
 
 
 
