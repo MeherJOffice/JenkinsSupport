@@ -151,6 +151,7 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
 
 
 
+
             echo "🧾 Extracted product name: ${productName}"
             
             def targetBuildFolder = "$HOME/jenkinsBuild/${productName}"
