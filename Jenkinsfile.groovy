@@ -139,23 +139,27 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
             }
 
             echo "✅ New CheckStatus.ts filename: ${newFileName}"
+
             env.NEW_CHECKSTATUS_FILENAME = newFileName
 
             // 🔍 Extract productName from Unity ProjectSettings.asset
-            def productName = sh(
-                script: "grep '^  productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/.*: *//'",
+                def productName = sh(
+                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
                 returnStdout: true
             ).trim()
 
+
+
             echo "🧾 Extracted product name: ${productName}"
+            
+            def targetBuildFolder = "$HOME/jenkinsBuild/${productName}"
 
             // 📂 Construct output path
-            def outputDir = "${env.HOME}/jenkinsBuild/${productName}"
             def jsonFile = "${outputDir}/filenameMap.json"
 
             // 📝 Create directory & write JSON file
             sh """
-                mkdir -p '${outputDir}' && \
+                mkdir -p '${targetBuildFolder}' && \
                 echo '{' > '${jsonFile}' && \
                 echo '  "CheckstatutName": "${newFileName}",' >> '${jsonFile}' && \
                 echo '  "FEln Name": "${newFileName}"' >> '${jsonFile}' && \
