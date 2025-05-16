@@ -142,13 +142,10 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
 
             env.NEW_CHECKSTATUS_FILENAME = newFileName
 
-            // 🔍 Extract productName from Unity ProjectSettings.asset
-                                // Extract product name (unsanitized) — as used in actual build folder naming
-                    def productName = sh(
+           def productName = sh(
                 script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
                 returnStdout: true
             ).trim()
-
 
 
 
