@@ -115,11 +115,13 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
             def testingFlag = params.TESTING.toString().toLowerCase()
             def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
 
+            // Step 1: Preprocess
             sh """
                 source '${venvPath}/bin/activate' && \
                 python3 '${jenkinsfiles}/Python/PreprocessCheckStatus.py' '${tsFilePath}' '${override}' '${testingFlag}'
             """
 
+            // Step 2: Run prepareUpStore
             def prepareOutput = sh(
                 script: "'${params.PLUGINS_PROJECT_PATH}/BootUnity213/prepareUpStore' 2>&1",
                 returnStdout: true
@@ -128,10 +130,13 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
             echo "📋 prepareUpStore output:"
             prepareOutput.readLines().each { line -> echo "│ ${line}" }
 
+            // Step 3: Extract new filename from log (no persistent Matcher)
             def newFileName = null
-            def matcher = prepareOutput =~ /__updating ts file from: .*CheckStatus\.ts to .*\/([A-Za-z0-9_]+\.ts)/
-            if (matcher.find()) {
-                newFileName = matcher.group(1)
+            prepareOutput.readLines().each { line ->
+                def m = (line =~ /__updating ts file from: .*CheckStatus\.ts to .*\/?([A-Za-z0-9_]+\.ts)/)
+                if (m.matches()) {
+                    newFileName = m[0][1]
+                }
             }
 
             if (!newFileName) {
@@ -139,24 +144,20 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
             }
 
             echo "✅ New CheckStatus.ts filename: ${newFileName}"
-
             env.NEW_CHECKSTATUS_FILENAME = newFileName
 
-           def productName = sh(
+            // Step 4: Get productName
+            def productName = sh(
                 script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
                 returnStdout: true
             ).trim()
 
-
-
             echo "🧾 Extracted product name: ${productName}"
-            
+
+            // Step 5: Write to JSON file
             def targetBuildFolder = "$HOME/jenkinsBuild/${productName}"
+            def jsonFile = "${targetBuildFolder}/filenameMap.json"
 
-            // 📂 Construct output path
-            def jsonFile = "${outputDir}/filenameMap.json"
-
-            // 📝 Create directory & write JSON file
             sh """
                 mkdir -p '${targetBuildFolder}' && \
                 echo '{' > '${jsonFile}' && \
@@ -169,6 +170,7 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
         }
     }
 }
+
 
 
 
