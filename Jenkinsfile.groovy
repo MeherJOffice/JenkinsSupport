@@ -96,38 +96,57 @@ pipeline {
             }
         }
 
-        stage('Preprocess CheckStatus.ts (Before Copy)') {
-            steps {
-                script {
-                    echo '⚙️ Preprocessing CheckStatus.ts with override and date...'
+stage('Preprocess CheckStatus.ts (Before Copy)') {
+    steps {
+        script {
+            echo '⚙️ Preprocessing CheckStatus.ts with override and date...'
 
-                    def venvPath = sh(
+            def venvPath = sh(
                 script: "find $HOME/.venvs -name 'pbxproj-env' -type d | head -n 1",
                 returnStdout: true
             ).trim()
 
-                    if (!venvPath) {
-                        error '❌ Python virtual environment not found!'
-                    }
+            if (!venvPath) {
+                error '❌ Python virtual environment not found!'
+            }
 
-                    def tsFilePath = "${params.PLUGINS_PROJECT_PATH}/BootUnity213/assets/LoadScene/CheckStatus.ts"
-                    def override = params.COCOS_OVERRIDE_VALUE
-                    def testingFlag = params.TESTING.toString().toLowerCase()
-                    def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
+            def tsFilePath = "${params.PLUGINS_PROJECT_PATH}/BootUnity213/assets/LoadScene/CheckStatus.ts"
+            def override = params.COCOS_OVERRIDE_VALUE
+            def testingFlag = params.TESTING.toString().toLowerCase()
+            def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
 
-                    sh """
+            // Preprocess the file
+            sh """
                 source '${venvPath}/bin/activate' && \
                 python3 '${jenkinsfiles}/Python/PreprocessCheckStatus.py' '${tsFilePath}' '${override}' '${testingFlag}'
             """
 
-                    if (params.COCOS_VERSION == 'cocos2') {
-                        sh "chmod +x '${params.PLUGINS_PROJECT_PATH}/BootUnity213/prepareUpStore'"
-                            sh "'${params.PLUGINS_PROJECT_PATH}/BootUnity213/prepareUpStore'"
-                    }
-                    echo '✅ CheckStatus.ts updated successfully.'
-                }
+            // Run prepareUpStore and capture output
+            def prepareOutput = sh(
+                script: "'${params.PLUGINS_PROJECT_PATH}/BootUnity213/prepareUpStore'",
+                returnStdout: true
+            ).trim()
+
+            echo prepareOutput // Debugging output
+
+            // Extract new filename from prepareUpStore logs
+            def match = prepareOutput.readLines().find { it.contains("CheckStatus.ts to") }
+            def newFileName = match ? match.split(" to ")[1].trim().tokenize('/').last() : null
+
+            if (!newFileName) {
+                error '❌ Failed to extract new filename for CheckStatus.ts!'
             }
+
+            echo "📝 New CheckStatus.ts filename is: ${newFileName}"
+
+            // (Optional) Save to environment variable for use in later stages
+            env.NEW_CHECKSTATUS_FILENAME = newFileName
+
+            echo '✅ CheckStatus.ts updated successfully.'
         }
+    }
+}
+
         stage('Sync BootUnity213 for Unity + Cocos 2.1.3') {
             when {
                 expression {
