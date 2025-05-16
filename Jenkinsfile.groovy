@@ -99,13 +99,13 @@ pipeline {
 stage('Preprocess CheckStatus.ts (Before Copy)') {
     steps {
         script {
-            echo '🔧 [STEP 1] Locating virtual environment...'
+            echo '⚙️ Preprocessing CheckStatus.ts with override and date...'
+
             def venvPath = sh(
                 script: "find $HOME/.venvs -name 'pbxproj-env' -type d | head -n 1",
                 returnStdout: true
             ).trim()
 
-            echo "📍 venvPath: ${venvPath}"
             if (!venvPath) {
                 error '❌ Python virtual environment not found!'
             }
@@ -115,44 +115,38 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
             def testingFlag = params.TESTING.toString().toLowerCase()
             def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
 
-            echo "🔧 [STEP 2] Running PreprocessCheckStatus.py..."
+            // Preprocess the file
             sh """
                 source '${venvPath}/bin/activate' && \
                 python3 '${jenkinsfiles}/Python/PreprocessCheckStatus.py' '${tsFilePath}' '${override}' '${testingFlag}'
             """
-            echo "✅ Preprocessing completed."
 
-            echo "🔧 [STEP 3] Running prepareUpStore..."
+            // Run prepareUpStore and capture both stdout + stderr
             def prepareOutput = sh(
-                script: "'${params.PLUGINS_PROJECT_PATH}/BootUnity213/prepareUpStore' > prepare_log.txt 2>&1; cat prepare_log.txt",
+                script: "'${params.PLUGINS_PROJECT_PATH}/BootUnity213/prepareUpStore' 2>&1",
                 returnStdout: true
             ).trim()
 
-            echo "📄 prepareUpStore output (start)"
-            prepareOutput.readLines().each { line ->
-                echo "│ ${line}"
-            }
-            echo "📄 prepareUpStore output (end)"
+            echo "📋 prepareUpStore output:\n${prepareOutput}"
 
-            echo "🔧 [STEP 4] Extracting new filename from prepareUpStore log..."
+            // Use regex to extract the new name for CheckStatus.ts
+            def newFileName = null
             def matcher = prepareOutput =~ /__updating ts file from: .*CheckStatus\.ts to .*\/([A-Za-z0-9_]+\.ts)/
-            if (!matcher.find()) {
-                echo "⚠️ First match failed. Trying fallback match without slash..."
-                matcher = prepareOutput =~ /__updating ts file from: .*CheckStatus\.ts to .*([A-Za-z0-9_]+\.ts)/
-            }
 
-            def newFileName = matcher.find() ? matcher.group(1) : null
-            echo "📌 Extracted filename: ${newFileName}"
+            if (matcher.find()) {
+                newFileName = matcher.group(1)
+            }
 
             if (!newFileName) {
                 error '❌ Failed to extract new filename for CheckStatus.ts!'
             }
 
+            echo "✅ New CheckStatus.ts filename: ${newFileName}"
             env.NEW_CHECKSTATUS_FILENAME = newFileName
-            echo "✅ New CheckStatus.ts filename saved: ${env.NEW_CHECKSTATUS_FILENAME}"
         }
     }
 }
+
 
 
 
