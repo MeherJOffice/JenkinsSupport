@@ -115,13 +115,13 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
             def testingFlag = params.TESTING.toString().toLowerCase()
             def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
 
-            // Preprocess the CheckStatus.ts file
+            // Step 1: Run Preprocess script
             sh """
                 source '${venvPath}/bin/activate' && \
                 python3 '${jenkinsfiles}/Python/PreprocessCheckStatus.py' '${tsFilePath}' '${override}' '${testingFlag}'
             """
 
-            // Run prepareUpStore and capture output
+            // Step 2: Run prepareUpStore and capture output
             def prepareOutput = sh(
                 script: "'${params.PLUGINS_PROJECT_PATH}/BootUnity213/prepareUpStore' > prepare_log.txt 2>&1; cat prepare_log.txt",
                 returnStdout: true
@@ -132,9 +132,9 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
                 echo "│ ${line}"
             }
 
-            // Extract new filename for CheckStatus.ts
+            // Step 3: Extract the new file name of CheckStatus.ts
             def newFileName = null
-            def matcher = prepareOutput =~ /__updating ts file from: .*CheckStatus\.ts to .*\/([A-Za-z0-9_]+\.ts)/
+            def matcher = prepareOutput =~ /__updating ts file from: .*CheckStatus\.ts to .*?([A-Za-z0-9_]+\.ts)/
 
             if (matcher.find()) {
                 newFileName = matcher.group(1)
@@ -149,6 +149,7 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
         }
     }
 }
+
 
         stage('Sync BootUnity213 for Unity + Cocos 2.1.3') {
             when {
