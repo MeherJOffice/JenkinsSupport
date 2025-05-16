@@ -142,20 +142,9 @@ pipeline {
 
             //env.NEW_CHECKSTATUS_FILENAME = newFileName
 
-                    def settingsPath = "${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset"
-                    echo "📄 Checking file: ${settingsPath}"
-                    sh "ls -l '${settingsPath}'"
 
-                    def productName = sh(
-    script: "grep 'productName:' '${settingsPath}' | sed 's/^[^:]*: *//'",
-    returnStdout: true
-).trim()
 
-                    echo "✅ Product name: ${productName}"
-
-                    echo "🧾 Extracted product name: ${productName}"
-
-                    def targetBuildFolder = "$HOME/jenkinsBuild/${productName}"
+                    def targetBuildFolder = "$HOME/jenkinsBuild"
 
                     // 📂 Construct output path
                     def jsonFile = "${outputDir}/filenameMap.json"
