@@ -115,23 +115,30 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
             def testingFlag = params.TESTING.toString().toLowerCase()
             def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
 
-            // Preprocess the file
+            // Run Preprocessor
             sh """
                 source '${venvPath}/bin/activate' && \
                 python3 '${jenkinsfiles}/Python/PreprocessCheckStatus.py' '${tsFilePath}' '${override}' '${testingFlag}'
             """
 
-            // Run prepareUpStore and capture output
+            // Run prepareUpStore and capture output from both stdout and stderr
             def prepareOutput = sh(
-                script: "'${params.PLUGINS_PROJECT_PATH}/BootUnity213/prepareUpStore'",
+                script: "'${params.PLUGINS_PROJECT_PATH}/BootUnity213/prepareUpStore' 2>&1",
                 returnStdout: true
             ).trim()
 
-            echo prepareOutput // Debugging output
+            echo "🔍 prepareUpStore output:\n${prepareOutput}"
 
-            // Extract new filename from prepareUpStore logs
-            def match = prepareOutput.readLines().find { it.contains("CheckStatus.ts to") }
-            def newFileName = match ? match.split(" to ")[1].trim().tokenize('/').last() : null
+            // Try to find the new filename for CheckStatus.ts
+            def matchLine = prepareOutput.readLines().find { it.toLowerCase().contains("checkstatus.ts to") }
+
+            def newFileName = null
+            if (matchLine) {
+                def parts = matchLine.split(" to ")
+                if (parts.size() == 2) {
+                    newFileName = parts[1].trim().tokenize('/').last()
+                }
+            }
 
             if (!newFileName) {
                 error '❌ Failed to extract new filename for CheckStatus.ts!'
@@ -139,13 +146,13 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
 
             echo "📝 New CheckStatus.ts filename is: ${newFileName}"
 
-            // (Optional) Save to environment variable for use in later stages
             env.NEW_CHECKSTATUS_FILENAME = newFileName
 
             echo '✅ CheckStatus.ts updated successfully.'
         }
     }
 }
+
 
         stage('Sync BootUnity213 for Unity + Cocos 2.1.3') {
             when {
