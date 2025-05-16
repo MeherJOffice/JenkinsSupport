@@ -115,43 +115,38 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
             def testingFlag = params.TESTING.toString().toLowerCase()
             def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
 
-            // Run Preprocessor
+            // Preprocess the file
             sh """
                 source '${venvPath}/bin/activate' && \
                 python3 '${jenkinsfiles}/Python/PreprocessCheckStatus.py' '${tsFilePath}' '${override}' '${testingFlag}'
             """
 
-            // Run prepareUpStore and capture output from both stdout and stderr
+            // Run prepareUpStore and capture both stdout + stderr
             def prepareOutput = sh(
                 script: "'${params.PLUGINS_PROJECT_PATH}/BootUnity213/prepareUpStore' 2>&1",
                 returnStdout: true
             ).trim()
 
-            echo "🔍 prepareUpStore output:\n${prepareOutput}"
+            echo "📋 prepareUpStore output:\n${prepareOutput}"
 
-            // Try to find the new filename for CheckStatus.ts
-            def matchLine = prepareOutput.readLines().find { it.toLowerCase().contains("checkstatus.ts to") }
-
+            // Use regex to extract the new name for CheckStatus.ts
             def newFileName = null
-            if (matchLine) {
-                def parts = matchLine.split(" to ")
-                if (parts.size() == 2) {
-                    newFileName = parts[1].trim().tokenize('/').last()
-                }
+            def matcher = prepareOutput =~ /__updating ts file from: .*CheckStatus\.ts to .*\/([A-Za-z0-9_]+\.ts)/
+
+            if (matcher.find()) {
+                newFileName = matcher.group(1)
             }
 
             if (!newFileName) {
                 error '❌ Failed to extract new filename for CheckStatus.ts!'
             }
 
-            echo "📝 New CheckStatus.ts filename is: ${newFileName}"
-
+            echo "✅ New CheckStatus.ts filename: ${newFileName}"
             env.NEW_CHECKSTATUS_FILENAME = newFileName
-
-            echo '✅ CheckStatus.ts updated successfully.'
         }
     }
 }
+
 
 
         stage('Sync BootUnity213 for Unity + Cocos 2.1.3') {
