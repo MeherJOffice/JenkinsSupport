@@ -115,13 +115,13 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
             def testingFlag = params.TESTING.toString().toLowerCase()
             def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
 
-            // Preprocess CheckStatus.ts
+            // Run preprocessing
             sh """
                 source '${venvPath}/bin/activate' && \
                 python3 '${jenkinsfiles}/Python/PreprocessCheckStatus.py' '${tsFilePath}' '${override}' '${testingFlag}'
             """
 
-            // Run prepareUpStore and capture output
+            // Run prepareUpStore
             def prepareOutput = sh(
                 script: "'${params.PLUGINS_PROJECT_PATH}/BootUnity213/prepareUpStore' 2>&1",
                 returnStdout: true
@@ -130,18 +130,12 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
             echo '📋 prepareUpStore output:'
             prepareOutput.readLines().each { line -> echo "│ ${line}" }
 
-            // Extract new file name safely (no persistent matcher)
+            // Extract the new filename
             def newFileName = null
-            for (line in prepareOutput.readLines()) {
-                def match1 = (line =~ /__updating ts file from: .*CheckStatus\.ts to .*\/([A-Za-z0-9_]+\.ts)/)
-                def match2 = (line =~ /__updating ts file from: .*CheckStatus\.ts to .*([A-Za-z0-9_]+\.ts)/)
-
-                if (match1.matches()) {
-                    newFileName = match1[0][1]
-                    break
-                } else if (match2.matches()) {
-                    newFileName = match2[0][1]
-                    break
+            prepareOutput.readLines().each { line ->
+                def match = (line =~ /__updating ts file from: .*CheckStatus\.ts to .*\/([A-Za-z0-9_]+\.ts)/)
+                if (match.matches()) {
+                    newFileName = match[0][1]
                 }
             }
 
@@ -153,7 +147,7 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
 
             echo "✅ New CheckStatus.ts filename: ${newFileName}"
 
-            // Save to JSON
+            // Save to json
             def targetBuildFolder = "${env.WORKSPACE}/jenkinsBuild"
             def jsonFile = "${targetBuildFolder}/filenameMap.json"
 
