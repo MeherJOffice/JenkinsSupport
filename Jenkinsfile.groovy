@@ -60,7 +60,7 @@ pipeline {
 stage('Clean Previous Build Folders') {
     when {
         expression {
-            return params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2'
+            return params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2' && params.TESTING == 'false'
         }
     }
     steps {
