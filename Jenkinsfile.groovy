@@ -137,8 +137,13 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
 
             echo "✅ New CheckStatus.ts filename: ${newFileName}"
 
+              def productName = sh(
+                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
+                returnStdout: true
+            ).trim()
+
             // Save result to JSON file
-            def jsonFilePath = "${env.WORKSPACE}/jenkinsBuild/filenameMap.json"
+            def jsonFilePath = "${env.HOME}/jenkinsBuild/${productName}/filenameMap.json"
             sh """
                 mkdir -p '${env.WORKSPACE}/jenkinsBuild' && \
                 echo '{' > '${jsonFilePath}' && \
