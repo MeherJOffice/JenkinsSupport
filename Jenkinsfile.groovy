@@ -142,27 +142,16 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
                 error '❌ Failed to extract new filename for CheckStatus.ts!'
             }
 
+            env.CHECKSTATUTNAME = newFileName
+
+            
+
             echo "✅ New CheckStatus.ts filename: ${newFileName}"
-
-            def productName = sh(
-                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
-                returnStdout: true
-            ).trim()
-
-            // Save result to JSON file
-            def jsonFilePath = "${env.HOME}/jenkinsBuild/${productName}/filenameMap.json"
-            sh """
-                mkdir -p '${env.HOME}/jenkinsBuild/${productName}' && \
-                echo '{' > '${jsonFilePath}' && \
-                echo '  "CheckstatutName": "${newFileName}",' >> '${jsonFilePath}' && \
-                echo '  "FEln Name": "${newFileName}"' >> '${jsonFilePath}' && \
-                echo '}' >> '${jsonFilePath}'
-            """
-
-            echo "✅ Saved filenameMap.json to: ${jsonFilePath}"
         }
     }
 }
+
+
 
 
 
@@ -363,6 +352,7 @@ stage('Copy Plugin Files to Unity Project') {
 
                     copiedScriptName = detectedCs.tokenize('/').last()
                     unityScriptPath = "${params.UNITY_PROJECT_PATH}/Assets/Scripts/${copiedScriptName}"
+
                 }
             }
 
@@ -382,12 +372,45 @@ stage('Copy Plugin Files to Unity Project') {
             """
             
             env.SCRIPT_TO_PATCH = unityScriptPath
+
             echo "📌 SCRIPT_TO_PATCH set to: ${env.SCRIPT_TO_PATCH}"
             echo '🎉 All plugin folders copied successfully and SCRIPT_TO_PATCH is set.'
         }
     }
 }
+stage('Save filenameMap.json') {
+    when {
+        expression {
+            return params.GAME_ENGINE == 'unity' &&
+                   params.COCOS_VERSION == 'cocos2' &&
+                   params.TESTING == true
+        }
+    }
+    steps {
+        script {
+            def productName = sh(
+                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
+                returnStdout: true
+            ).trim()
 
+            def outputDir = "${env.HOME}/jenkinsBuild/${productName}"
+            def jsonFilePath = "${outputDir}/filenameMap.json"
+
+            def checkStatusName = env.CHECKSTATUTNAME ?: "undefined"
+            def scriptToPatch = env.SCRIPT_TO_PATCH ?: "undefined"
+
+            def jsonContent = """{
+  "CheckstatutName": "${checkStatusName}",
+  "FEln Name": "${scriptToPatch}"
+}
+"""
+
+            // Write the file
+            writeFile file: jsonFilePath, text: jsonContent
+            echo "✅ Saved filenameMap.json to: ${jsonFilePath}"
+        }
+    }
+}
 
 
         stage('Add SharpZipLib Package via Package Manager') {
