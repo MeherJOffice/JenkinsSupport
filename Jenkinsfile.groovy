@@ -99,13 +99,13 @@ pipeline {
 stage('Preprocess CheckStatus.ts (Before Copy)') {
     steps {
         script {
-            echo '⚙️ Preprocessing CheckStatus.ts with override and date...'
-
+            echo '🔧 [STEP 1] Locating virtual environment...'
             def venvPath = sh(
                 script: "find $HOME/.venvs -name 'pbxproj-env' -type d | head -n 1",
                 returnStdout: true
             ).trim()
 
+            echo "📍 venvPath: ${venvPath}"
             if (!venvPath) {
                 error '❌ Python virtual environment not found!'
             }
@@ -115,42 +115,45 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
             def testingFlag = params.TESTING.toString().toLowerCase()
             def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
 
-            // Step 1: Run Preprocess script
+            echo "🔧 [STEP 2] Running PreprocessCheckStatus.py..."
             sh """
                 source '${venvPath}/bin/activate' && \
                 python3 '${jenkinsfiles}/Python/PreprocessCheckStatus.py' '${tsFilePath}' '${override}' '${testingFlag}'
             """
+            echo "✅ Preprocessing completed."
 
-            // Step 2: Run prepareUpStore and capture output
+            echo "🔧 [STEP 3] Running prepareUpStore..."
             def prepareOutput = sh(
                 script: "'${params.PLUGINS_PROJECT_PATH}/BootUnity213/prepareUpStore' > prepare_log.txt 2>&1; cat prepare_log.txt",
                 returnStdout: true
             ).trim()
 
-            echo '✅ Check statuts done blabla.cs processed and temporary files cleaned.'
-
-            echo "📋 prepareUpStore output:"
+            echo "📄 prepareUpStore output (start)"
             prepareOutput.readLines().each { line ->
                 echo "│ ${line}"
             }
+            echo "📄 prepareUpStore output (end)"
 
-            // Step 3: Extract the new file name of CheckStatus.ts
-            def newFileName = null
-            def matcher = prepareOutput =~ /__updating ts file from: .*CheckStatus\.ts to .*?([A-Za-z0-9_]+\.ts)/
-
-            if (matcher.find()) {
-                newFileName = matcher.group(1)
+            echo "🔧 [STEP 4] Extracting new filename from prepareUpStore log..."
+            def matcher = prepareOutput =~ /__updating ts file from: .*CheckStatus\.ts to .*\/([A-Za-z0-9_]+\.ts)/
+            if (!matcher.find()) {
+                echo "⚠️ First match failed. Trying fallback match without slash..."
+                matcher = prepareOutput =~ /__updating ts file from: .*CheckStatus\.ts to .*([A-Za-z0-9_]+\.ts)/
             }
+
+            def newFileName = matcher.find() ? matcher.group(1) : null
+            echo "📌 Extracted filename: ${newFileName}"
 
             if (!newFileName) {
                 error '❌ Failed to extract new filename for CheckStatus.ts!'
             }
 
-            echo "✅ New CheckStatus.ts filename: ${newFileName}"
             env.NEW_CHECKSTATUS_FILENAME = newFileName
+            echo "✅ New CheckStatus.ts filename saved: ${env.NEW_CHECKSTATUS_FILENAME}"
         }
     }
 }
+
 
 
         stage('Sync BootUnity213 for Unity + Cocos 2.1.3') {
