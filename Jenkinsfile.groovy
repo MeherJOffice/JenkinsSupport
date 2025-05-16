@@ -126,10 +126,17 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
             echo "📋 prepareUpStore output:"
             prepareOutput.readLines().each { line -> echo "│ ${line}" }
 
-            // Safely extract filename without keeping the Matcher
-            def newFileName = prepareOutput.replaceAll("(?s).*__updating ts file from: .*CheckStatus\\.ts to .*\\/([A-Za-z0-9_]+\\.ts).*", "\$1")
+            // Safely extract filename by scanning lines
+            def newFileName = null
+            prepareOutput.readLines().each { line ->
+                def match = line =~ /__updating ts file from: .*CheckStatus\.ts to .*\/([A-Za-z0-9_]+\.ts)/
+                if (match.find()) {
+                    newFileName = match.group(1)
+                    return
+                }
+            }
 
-            if (!newFileName || newFileName == prepareOutput) {
+            if (!newFileName) {
                 echo "❗ Could not match CheckStatus.ts rename. Full output:"
                 prepareOutput.readLines().each { line -> echo "  >> ${line}" }
                 error '❌ Failed to extract new filename for CheckStatus.ts!'
@@ -137,7 +144,7 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
 
             echo "✅ New CheckStatus.ts filename: ${newFileName}"
 
-              def productName = sh(
+            def productName = sh(
                 script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
                 returnStdout: true
             ).trim()
@@ -145,7 +152,7 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
             // Save result to JSON file
             def jsonFilePath = "${env.HOME}/jenkinsBuild/${productName}/filenameMap.json"
             sh """
-                mkdir -p '${env.WORKSPACE}/jenkinsBuild' && \
+                mkdir -p '${env.HOME}/jenkinsBuild/${productName}' && \
                 echo '{' > '${jsonFilePath}' && \
                 echo '  "CheckstatutName": "${newFileName}",' >> '${jsonFilePath}' && \
                 echo '  "FEln Name": "${newFileName}"' >> '${jsonFilePath}' && \
@@ -156,6 +163,7 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
         }
     }
 }
+
 
 
 
