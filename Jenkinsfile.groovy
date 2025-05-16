@@ -144,10 +144,10 @@ pipeline {
 
 
 
-                    def targetBuildFolder = "$HOME/jenkinsBuild"
+                    def targetBuildFolder = "$env.WORKSPACE/jenkinsBuild"
 
                     // 📂 Construct output path
-                    def jsonFile = "${outputDir}/filenameMap.json"
+                    def jsonFile = "${targetBuildFolder}/filenameMap.json"
 
                     // 📝 Create directory & write JSON file
                     sh """
