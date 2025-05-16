@@ -17,6 +17,9 @@ pipeline {
         HOME_DIR = "${env.HOME}"
     }
     stages {
+        when {
+                expression { params.TESTING == 'true' }
+            }
         stage('Reset Plugin Repo') {
             steps {
                 script {
@@ -53,9 +56,84 @@ pipeline {
             }
         }
 
+stage('Clean Previous Build Folders') {
+    when {
+        expression {
+            return params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2'
+        }
+    }
+    steps {
+        script {
+            echo '🧹 Cleaning previous build folders under jenkinsBuild/${productName}...'
+
+            def productName = sh(
+                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
+                returnStdout: true
+            ).trim()
+
+            def buildPath = "${env.HOME}/jenkinsBuild/${productName}"
+            def folders = ['CocosBuild', 'UnityBuild', 'XcodeWorkspace']
+
+            folders.each { folder ->
+                def fullPath = "${buildPath}/${folder}"
+                if (fileExists(fullPath)) {
+                    echo "🗑 Deleting: ${fullPath}"
+                    sh "rm -rf '${fullPath}'"
+                } else {
+                    echo "✅ ${folder} does not exist, skipping."
+                }
+            }
+
+            echo "✅ Cleanup finished for ${buildPath}"
+        }
+    }
+}
+
+
+stage('Update Script Dates (If Not Testing)') {
+    when {
+        allOf {
+            expression { params.GAME_ENGINE == 'unity' }
+            expression { params.COCOS_VERSION == 'cocos2' }
+            expression { !params.TESTING }
+        }
+    }
+    steps {
+        script {
+            echo '📆 Updating date inside CheckStatus and FE2In scripts...'
+
+            def productName = sh(
+                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
+                returnStdout: true
+            ).trim()
+
+            def jsonFilePath = "${env.HOME}/jenkinsBuild/${productName}/filenameMap.json"
+
+            // Parse CheckstatutName and FEln Name from JSON
+            def jsonContent = readJSON file: jsonFilePath
+            def checkStatusPath = "${params.COCOS_PROJECT_PATH}/assets/LoadScene/${jsonContent.CheckstatutName}"
+            def feInPath = jsonContent["FEln Name"]
+
+            def pythonScript = "${env.WORKSPACE}/JenkinsFiles/Python/UpdateScriptDate.py"
+
+            sh """
+                source '${env.HOME}/.venvs/pbxproj-env/bin/activate' && \
+                python3 '${pythonScript}' '${checkStatusPath}' && \
+                python3 '${pythonScript}' '${feInPath}'
+            """
+
+            echo "✅ Date updated in ${checkStatusPath} and ${feInPath}"
+        }
+    }
+}
+
         stage('Preprocess FE2In.cs (Unity Script)') {
             when {
-                expression { params.GAME_ENGINE == 'unity' }
+            expression 
+            {
+                return params.GAME_ENGINE == 'unity' &&
+                   params.TESTING == true
+                }
             }
             steps {
                 script {
@@ -97,6 +175,12 @@ pipeline {
         }
 
 stage('Preprocess CheckStatus.ts (Before Copy)') {
+       when {
+        expression {
+            return params.COCOS_VERSION == 'cocos2' &&
+                   params.TESTING == true
+        }
+    }
     steps {
         script {
             echo '⚙️ Preprocessing CheckStatus.ts with override and date...'
@@ -153,16 +237,11 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
 
 
 
-
-
-
-
-
-
         stage('Sync BootUnity213 for Unity + Cocos 2.1.3') {
             when {
                 expression {
-                    return params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2'
+                    return params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2'  &&
+                    params.TESTING == true
                 }
             }
             steps {
@@ -208,9 +287,12 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
         }
 
         stage('Build Cocos Project') {
-                    when {
-                        expression { params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2' }
-                    }
+                 when {
+                expression {
+                    return params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2'  &&
+                    params.TESTING == true
+                }
+            }
                     steps {
                         script {
                             echo '🚀 Preparing Cocos project build...'
@@ -244,7 +326,10 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
 
         stage('Update Cocos Build Settings') {
             when {
-                expression { params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2' }
+                expression {
+                    return params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2'  &&
+                    params.TESTING == true
+                }
             }
             steps {
                 script {
@@ -313,9 +398,12 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
         }
 
 stage('Copy Plugin Files to Unity Project') {
-    when {
-        expression { params.GAME_ENGINE == 'unity' }
-    }
+        when {
+                expression {
+                    return params.GAME_ENGINE == 'unity'
+                    params.TESTING == true
+                }
+            }
     steps {
         script {
             echo '🔄 Copying plugin folders (Editor, Plugins, Scripts) to Unity project, excluding .meta files...'
@@ -378,6 +466,8 @@ stage('Copy Plugin Files to Unity Project') {
         }
     }
 }
+
+
 stage('Save filenameMap.json') {
     when {
         expression {
@@ -414,8 +504,10 @@ stage('Save filenameMap.json') {
 
 
         stage('Add SharpZipLib Package via Package Manager') {
-            when {
-                expression { params.GAME_ENGINE == 'unity' }
+                 when {
+                expression {
+                    return params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2'
+                }
             }
             steps {
                 script {
@@ -448,9 +540,11 @@ stage('Save filenameMap.json') {
 
 
  stage('Setup Unity Project') {
-    when {
-        expression { params.GAME_ENGINE == 'unity' }
-    }
+       when {
+                expression {
+                    return params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2'       
+                }
+            }
     steps {
         script {
             def projectPath = params.UNITY_PROJECT_PATH
@@ -592,8 +686,11 @@ stage('Save filenameMap.json') {
             }
         }
         stage('Cleanup Unity Editor Scripts') {
-            when {
-                expression { params.GAME_ENGINE == 'unity' }
+               when {
+                expression {
+                    return params.GAME_ENGINE == 'unity' &&
+                    params.TESTING == false
+                }
             }
             steps {
                 script {
@@ -799,9 +896,12 @@ stage('Save filenameMap.json') {
         }
 
         stage('Copy functionsMap.json to Cocos Build') {
-    when {
-        expression { params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2' }
-    }
+              when {
+                expression {
+                    return params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2'  &&
+                    params.TESTING == true
+                }
+            }
     steps {
         script {
             def productName = sh(
