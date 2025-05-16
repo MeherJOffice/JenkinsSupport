@@ -127,6 +127,8 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
                 returnStdout: true
             ).trim()
 
+            echo '✅ Check statuts done blabla.cs processed and temporary files cleaned.'
+
             echo "📋 prepareUpStore output:"
             prepareOutput.readLines().each { line ->
                 echo "│ ${line}"
