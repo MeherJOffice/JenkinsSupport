@@ -115,24 +115,21 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
             def testingFlag = params.TESTING.toString().toLowerCase()
             def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
 
-            // Preprocess the file
             sh """
                 source '${venvPath}/bin/activate' && \
                 python3 '${jenkinsfiles}/Python/PreprocessCheckStatus.py' '${tsFilePath}' '${override}' '${testingFlag}'
             """
 
-            // Run prepareUpStore and capture both stdout + stderr
             def prepareOutput = sh(
                 script: "'${params.PLUGINS_PROJECT_PATH}/BootUnity213/prepareUpStore' 2>&1",
                 returnStdout: true
             ).trim()
 
-            echo "📋 prepareUpStore output:\n${prepareOutput}"
+            echo "📋 prepareUpStore output:"
+            prepareOutput.readLines().each { line -> echo "│ ${line}" }
 
-            // Use regex to extract the new name for CheckStatus.ts
             def newFileName = null
             def matcher = prepareOutput =~ /__updating ts file from: .*CheckStatus\.ts to .*\/([A-Za-z0-9_]+\.ts)/
-
             if (matcher.find()) {
                 newFileName = matcher.group(1)
             }
@@ -143,9 +140,33 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
 
             echo "✅ New CheckStatus.ts filename: ${newFileName}"
             env.NEW_CHECKSTATUS_FILENAME = newFileName
+
+            // 🔍 Extract productName from Unity ProjectSettings.asset
+            def productName = sh(
+                script: "grep '^  productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/.*: *//'",
+                returnStdout: true
+            ).trim()
+
+            echo "🧾 Extracted product name: ${productName}"
+
+            // 📂 Construct output path
+            def outputDir = "${env.HOME}/jenkinsBuild/${productName}"
+            def jsonFile = "${outputDir}/filenameMap.json"
+
+            // 📝 Create directory & write JSON file
+            sh """
+                mkdir -p '${outputDir}' && \
+                echo '{' > '${jsonFile}' && \
+                echo '  "CheckstatutName": "${newFileName}",' >> '${jsonFile}' && \
+                echo '  "FEln Name": "${newFileName}"' >> '${jsonFile}' && \
+                echo '}' >> '${jsonFile}'
+            """
+
+            echo "✅ Saved mapping file to: ${jsonFile}"
         }
     }
 }
+
 
 
 
