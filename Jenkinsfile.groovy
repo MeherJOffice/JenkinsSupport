@@ -17,10 +17,11 @@ pipeline {
         HOME_DIR = "${env.HOME}"
     }
     stages {
-        when {
+   
+        stage('Reset Plugin Repo') {
+            when {
                 expression { params.TESTING == 'true' }
             }
-        stage('Reset Plugin Repo') {
             steps {
                 script {
                     def pluginPath = params.PLUGINS_PROJECT_PATH
