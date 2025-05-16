@@ -120,25 +120,27 @@ pipeline {
                 python3 '${jenkinsfiles}/Python/PreprocessCheckStatus.py' '${tsFilePath}' '${override}' '${testingFlag}'
             """
 
-                    def prepareOutput = sh(
-                script: "'${params.PLUGINS_PROJECT_PATH}/BootUnity213/prepareUpStore' 2>&1",
-                returnStdout: true
-            ).trim()
+                   def prepareOutput = sh(
+    script: "'${params.PLUGINS_PROJECT_PATH}/BootUnity213/prepareUpStore' 2>&1",
+    returnStdout: true
+).trim()
 
-                    echo '📋 prepareUpStore output:'
-                    prepareOutput.readLines().each { line -> echo "│ ${line}" }
+echo '📋 prepareUpStore output:'
+prepareOutput.readLines().each { line -> echo "│ ${line}" }
 
-                    def newFileName = null
-                    def matcher = prepareOutput =~ /__updating ts file from: .*CheckStatus\.ts to .*\/([A-Za-z0-9_]+\.ts)/
-                    if (matcher.find()) {
-                        newFileName = matcher.group(1)
-                    }
+def newFileName = prepareOutput
+    .readLines()
+    .collect { line ->
+        def m = (line =~ /__updating ts file from: .*CheckStatus\.ts to .*\/?([A-Za-z0-9_]+\.ts)/)
+        return m.matches() ? m[0][1] : null
+    }
+    .find { it != null }
 
-                    if (!newFileName) {
-                        error '❌ Failed to extract new filename for CheckStatus.ts!'
-                    }
+if (!newFileName) {
+    error '❌ Failed to extract new filename for CheckStatus.ts!'
+}
 
-                    echo "✅ New CheckStatus.ts filename: ${newFileName}"
+echo "✅ New CheckStatus.ts filename: ${newFileName}"
 
             //env.NEW_CHECKSTATUS_FILENAME = newFileName
 
