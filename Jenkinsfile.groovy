@@ -10,34 +10,35 @@ pipeline {
         choice(name: 'COCOS_VERSION', choices: ['cocos2', 'cocos3'], description: 'Cocos version')
         choice(name: 'GAME_ENGINE', choices: ['unity', 'cocos2', 'cocos3'], description: 'Game engine to build')
         string(name: 'SCENE_INDEX_TO_PATCH', defaultValue: '0', description: 'Index of the scene in Build Settings to inject the object into')
-        booleanParam(name: 'TESTING', defaultValue: false, description: 'If true, use last month’s date; if false, use today’s date')
+        choice(name: 'ENVIRONMENT', choices: ['Production', 'Testing'], description: 'Select build mode: Testing uses last month’s date, Production uses today’s date')
     }
     environment {
-        PATH = "/usr/local/go/bin:${env.PATH}" // Adjust path if needed
+        PATH = "/usr/local/go/bin:${env.PATH}"
         HOME_DIR = "${env.HOME}"
     }
     stages {
    
         stage('Reset Plugin Repo') {
-            when {
-                expression { params.TESTING == 'true' }
-            }
-            steps {
-                script {
-                    def pluginPath = params.PLUGINS_PROJECT_PATH
+    when {
+        expression { params.ENVIRONMENT == 'Testing' }
+    }
+    steps {
+        script {
+            def pluginPath = params.PLUGINS_PROJECT_PATH
 
-                    echo "🧹 Cleaning Git repo at: ${pluginPath}"
+            echo "🧹 Cleaning Git repo at: ${pluginPath}"
 
-                    sh """
+            sh """
                 cd '${pluginPath}'
                 git reset --hard HEAD
                 git clean -fd
             """
 
-                    echo '✅ Plugin repo reset to a clean state.'
-                }
-            }
+            echo '✅ Plugin repo reset to a clean state.'
         }
+    }
+}
+
 
         stage('Validate Paths') {
             steps {
@@ -59,8 +60,10 @@ pipeline {
 
 stage('Clean Previous Build Folders') {
     when {
-        expression {
-            return params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2' && params.TESTING == 'false'
+        allOf {
+            expression { params.GAME_ENGINE == 'unity' }
+            expression { params.COCOS_VERSION == 'cocos2' }
+            expression { params.ENVIRONMENT == 'Production' }
         }
     }
     steps {
@@ -91,17 +94,29 @@ stage('Clean Previous Build Folders') {
 }
 
 
+
 stage('Update Script Dates (If Not Testing)') {
     when {
         allOf {
             expression { params.GAME_ENGINE == 'unity' }
             expression { params.COCOS_VERSION == 'cocos2' }
-            expression { !params.TESTING }
+            expression { params.ENVIRONMENT == 'Production' }
         }
     }
     steps {
         script {
             echo '📆 Updating date inside CheckStatus and FE2In scripts...'
+
+            def venvPath = sh(
+                script: "find $HOME/.venvs -name 'pbxproj-env' -type d | head -n 1",
+                returnStdout: true
+            ).trim()
+
+            if (!venvPath) {
+                error '❌ Virtual environment not found!'
+            }
+
+            echo "✅ Found VENV at: ${venvPath}"
 
             def productName = sh(
                 script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
@@ -109,16 +124,17 @@ stage('Update Script Dates (If Not Testing)') {
             ).trim()
 
             def jsonFilePath = "${env.HOME}/jenkinsBuild/${productName}/filenameMap.json"
+            def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
+            def pythonScript = "${jenkinsfiles}/Python/UpdateScriptDate.py"
 
-            // Parse CheckstatutName and FEln Name from JSON
             def jsonContent = readJSON file: jsonFilePath
             def checkStatusPath = "${params.COCOS_PROJECT_PATH}/assets/LoadScene/${jsonContent.CheckstatutName}"
             def feInPath = jsonContent["FEln Name"]
 
-            def pythonScript = "${env.WORKSPACE}/JenkinsFiles/Python/UpdateScriptDate.py"
+            echo "📄 Parsed JSON: CheckStatus = ${checkStatusPath}, FE2In = ${feInPath}"
 
             sh """
-                source '${env.HOME}/.venvs/pbxproj-env/bin/activate' && \
+                source '${venvPath}/bin/activate' && \
                 python3 '${pythonScript}' '${checkStatusPath}' && \
                 python3 '${pythonScript}' '${feInPath}'
             """
@@ -128,58 +144,60 @@ stage('Update Script Dates (If Not Testing)') {
     }
 }
 
-        stage('Preprocess FE2In.cs (Unity Script)') {
-            when {
-            expression 
-            {
-                return params.GAME_ENGINE == 'unity' &&
-                   params.TESTING == true
-                }
-            }
-            steps {
-                script {
-                    echo '🧠 Preprocessing FE2In.cs...'
 
-                    def venvPath = sh(
+       stage('Preprocess FE2In.cs (Unity Script)') {
+    when {
+        expression {
+            return params.GAME_ENGINE == 'unity' && params.ENVIRONMENT == 'Testing'
+        }
+    }
+    steps {
+        script {
+            echo '🧠 Preprocessing FE2In.cs...'
+
+            def venvPath = sh(
                 script: "find $HOME/.venvs -name 'pbxproj-env' -type d | head -n 1",
                 returnStdout: true
             ).trim()
 
-                    if (!venvPath) {
-                        error '❌ Virtual environment not found!'
-                    }
-                    echo "✅ Found VENV at: ${venvPath}"
+            if (!venvPath) {
+                error '❌ Virtual environment not found!'
+            }
+            echo "✅ Found VENV at: ${venvPath}"
 
-                    def fe2inScript = "${params.PLUGINS_PROJECT_PATH}/unityProj/Assets/Scripts/FE2In.cs"
-                    def fe2inPy = "${fe2inScript}.py"
-                    def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
+            def fe2inScript = "${params.PLUGINS_PROJECT_PATH}/unityProj/Assets/Scripts/FE2In.cs"
+            def fe2inPy = "${fe2inScript}.py"
+            def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
 
-                    // Copy the Python script next to the C# script
-                    sh "cp '${jenkinsfiles}/Python/PreprocessFE2In.py' '${fe2inPy}'"
+            // Convert ENVIRONMENT to 'true' or 'false' for the Python script
+            def isTesting = params.ENVIRONMENT == 'Testing' ? 'true' : 'false'
 
-                    // Run the Python script
-                    sh """
+            // Copy the Python script next to the C# script
+            sh "cp '${jenkinsfiles}/Python/PreprocessFE2In.py' '${fe2inPy}'"
+
+            // Run the Python script
+            sh """
                 source '${venvPath}/bin/activate' && \
-                python3 '${fe2inPy}' '${fe2inScript}' '${params.UNITY_OVERRIDE_VALUE}' '${params.TESTING}'
+                python3 '${fe2inPy}' '${fe2inScript}' '${params.UNITY_OVERRIDE_VALUE}' '${isTesting}'
             """
 
-                    // Run Unity script modifier
-                    sh "chmod +x '${params.PLUGINS_PROJECT_PATH}/shuffleAndRandomizeCode'"
-                    sh "'${params.PLUGINS_PROJECT_PATH}/shuffleAndRandomizeCode'"
+            // Run Unity script modifier
+            sh "chmod +x '${params.PLUGINS_PROJECT_PATH}/shuffleAndRandomizeCode'"
+            sh "'${params.PLUGINS_PROJECT_PATH}/shuffleAndRandomizeCode'"
 
-                    // 🔥 Delete the temporary Python script
-                    sh "rm -f '${fe2inPy}'"
+            // 🔥 Delete the temporary Python script
+            sh "rm -f '${fe2inPy}'"
 
-                    echo '✅ FE2In.cs processed and temporary files cleaned.'
-                }
-            }
+            echo '✅ FE2In.cs processed and temporary files cleaned.'
         }
+    }
+}
+
 
 stage('Preprocess CheckStatus.ts (Before Copy)') {
-       when {
+    when {
         expression {
-            return params.COCOS_VERSION == 'cocos2' &&
-                   params.TESTING == true
+            return params.COCOS_VERSION == 'cocos2' && params.ENVIRONMENT == 'Testing'
         }
     }
     steps {
@@ -193,7 +211,7 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
 
             def tsFilePath = "${params.PLUGINS_PROJECT_PATH}/BootUnity213/assets/LoadScene/CheckStatus.ts"
             def override = params.COCOS_OVERRIDE_VALUE
-            def testingFlag = params.TESTING.toString().toLowerCase()
+            def testingFlag = params.ENVIRONMENT == 'Testing' ? 'true' : 'false'
             def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
 
             // Run Python preprocessor
@@ -229,8 +247,6 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
 
             env.CHECKSTATUTNAME = newFileName
 
-            
-
             echo "✅ New CheckStatus.ts filename: ${newFileName}"
         }
     }
@@ -238,43 +254,43 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
 
 
 
-        stage('Sync BootUnity213 for Unity + Cocos 2.1.3') {
-            when {
-                expression {
-                    return params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2'  &&
-                    params.TESTING == true
-                }
+
+       stage('Sync BootUnity213 for Unity + Cocos 2.1.3') {
+    when {
+        expression {
+            return params.GAME_ENGINE == 'unity' &&
+                   params.COCOS_VERSION == 'cocos2' &&
+                   params.ENVIRONMENT == 'Testing'
+        }
+    }
+    steps {
+        script {
+            echo '🔄 Syncing BootUnity213 into Cocos project...'
+
+            def pluginRepo = "${params.PLUGINS_PROJECT_PATH}"
+            def cocosProjectPath = "${params.COCOS_PROJECT_PATH}"
+
+            // Paths to copy from
+            def bootUnityPath = "${pluginRepo}/BootUnity213"
+
+            // Items to copy
+            def foldersToCopy = ['assets', 'build-templates', 'settings']
+            def filesToCopy = ['changeLibCC', 'creator.d.ts', 'jsconfig.json', 'project.json']
+
+            // Build copy command
+            def copyCommands = []
+
+            foldersToCopy.each { folder ->
+                copyCommands << "rm -rf '${cocosProjectPath}/${folder}'"
+                copyCommands << "cp -R '${bootUnityPath}/${folder}' '${cocosProjectPath}/'"
             }
-            steps {
-                script {
-                    echo '🔄 Syncing BootUnity213 into Cocos project...'
 
-                    def pluginRepo = "${params.PLUGINS_PROJECT_PATH}"
-                    def cocosProjectPath = "${params.COCOS_PROJECT_PATH}"
+            filesToCopy.each { file ->
+                copyCommands << "rm -f '${cocosProjectPath}/${file}'"
+                copyCommands << "cp '${bootUnityPath}/${file}' '${cocosProjectPath}/'"
+            }
 
-                    // Paths to copy from
-                    def bootUnityPath = "${pluginRepo}/BootUnity213"
-
-                    // Items to copy
-                    def foldersToCopy = ['assets', 'build-templates', 'settings']
-                    def filesToCopy = ['changeLibCC', 'creator.d.ts', 'jsconfig.json', 'project.json']
-
-                    // Build copy command
-                    def copyCommands = []
-
-                    foldersToCopy.each {
-                folder->
-                        copyCommands << "rm -rf '${cocosProjectPath}/${folder}'"
-                        copyCommands << "cp -R '${bootUnityPath}/${folder}' '${cocosProjectPath}/'"
-                    }
-
-                    filesToCopy.each {
-                file->
-                        copyCommands << "rm -f '${cocosProjectPath}/${file}'"
-                        copyCommands << "cp '${bootUnityPath}/${file}' '${cocosProjectPath}/'"
-                    }
-
-                    sh """
+            sh """
                 set -e
                 echo "📁 Plugin repo path: ${pluginRepo}"
                 echo "🎮 Cocos project path: ${cocosProjectPath}"
@@ -283,29 +299,31 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
 
                 echo "✅ BootUnity213 synced successfully."
             """
-                }
-            }
         }
+    }
+}
+
 
         stage('Build Cocos Project') {
-                 when {
-                expression {
-                    return params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2'  &&
-                    params.TESTING == true
-                }
-            }
-                    steps {
-                        script {
-                            echo '🚀 Preparing Cocos project build...'
+    when {
+        expression {
+            return params.GAME_ENGINE == 'unity' &&
+                   params.COCOS_VERSION == 'cocos2' &&
+                   params.ENVIRONMENT == 'Testing'
+        }
+    }
+    steps {
+        script {
+            echo '🚀 Preparing Cocos project build...'
 
-                            // Define Cocos Creator executable path
-                            def cocosCreatorPath = '/Applications/CocosCreator-2.1.3.app/Contents/MacOS/CocosCreator'
+            // Define Cocos Creator executable path
+            def cocosCreatorPath = '/Applications/CocosCreator-2.1.3.app/Contents/MacOS/CocosCreator'
 
-                            // Clean old build folder if it exists
-                            def oldBuildPath = "${params.COCOS_PROJECT_PATH}/build"
-                            echo "🧹 Checking and cleaning old build at: ${oldBuildPath}"
+            // Clean old build folder if it exists
+            def oldBuildPath = "${params.COCOS_PROJECT_PATH}/build"
+            echo "🧹 Checking and cleaning old build at: ${oldBuildPath}"
 
-                            sh """
+            sh """
                 if [ -d '${oldBuildPath}' ]; then
                     echo "🗑️ Old build found. Deleting..."
                     rm -rf '${oldBuildPath}'
@@ -314,47 +332,48 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
                 fi
             """
 
-                            // Start building
-                            echo '🚀 Starting fresh Cocos project build...'
-                            sh """
+            // Start building
+            echo '🚀 Starting fresh Cocos project build...'
+            sh """
                 '${cocosCreatorPath}' --path '${params.COCOS_PROJECT_PATH}' --build "platform=ios;debug=false"
             """
 
-                            echo '✅ Cocos project build completed!'
-                        }
-                    }
+            echo '✅ Cocos project build completed!'
         }
+    }
+}
 
         stage('Update Cocos Build Settings') {
-            when {
-                expression {
-                    return params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2'  &&
-                    params.TESTING == true
-                }
-            }
-            steps {
-                script {
-                    echo '🔎 Searching for Python virtual environment...'
+    when {
+        expression {
+            return params.GAME_ENGINE == 'unity' &&
+                   params.COCOS_VERSION == 'cocos2' &&
+                   params.ENVIRONMENT == 'Testing'
+        }
+    }
+    steps {
+        script {
+            echo '🔎 Searching for Python virtual environment...'
 
-                    def venvPath = sh(
+            def venvPath = sh(
                 script: "find $HOME/.venvs -name 'pbxproj-env' -type d | head -n 1",
                 returnStdout: true
             ).trim()
 
-                    if (!venvPath) {
-                        error '❌ Virtual environment not found!'
-                    }
+            if (!venvPath) {
+                error '❌ Virtual environment not found!'
+            }
 
-                    echo "✅ Found VENV at: ${venvPath}"
+            echo "✅ Found VENV at: ${venvPath}"
 
-                    // Extract product name
-                    def productName = sh(
+            // Extract product name
+            def productName = sh(
                 script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
                 returnStdout: true
             ).trim()
 
-                    // Try Unity 6+ format first
-                    def bundleId = sh(
+            // Try Unity 6+ format first
+            def bundleId = sh(
                 script: """
                     awk '/applicationIdentifier:/,/^[^ ]/' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | \
                     grep 'iPhone:' | sed 's/^.*iPhone: *//' | head -n 1 | tr -d '\\n\\r'
@@ -362,49 +381,49 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
                 returnStdout: true
             ).trim()
 
-                    // Fallback for older Unity versions
-                    if (!bundleId) {
-                        bundleId = sh(
+            // Fallback for older Unity versions
+            if (!bundleId) {
+                bundleId = sh(
                     script: """
                         grep 'bundleIdentifier:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | \
                         sed 's/^[^:]*: *//' | head -n 1 | tr -d '\\n\\r'
                     """,
                     returnStdout: true
                 ).trim()
-                    }
+            }
 
-                    echo "📦 Product Name: ${productName}"
-                    echo "🔐 Bundle ID: ${bundleId}"
-                    def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
+            echo "📦 Product Name: ${productName}"
+            echo "🔐 Bundle ID: ${bundleId}"
+            def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
 
-                    def pythonFile = "${jenkinsfiles}/SetupCocosBuildSettings.py"
-                    def cocosProject = params.COCOS_PROJECT_PATH
+            def pythonFile = "${jenkinsfiles}/SetupCocosBuildSettings.py"
+            def cocosProject = params.COCOS_PROJECT_PATH
 
-                    // Copy Python script into project
-                    sh "cp '${jenkinsfiles}/Python/SetupCocosBuildSettings.py' '${pythonFile}'"
+            // Copy Python script into project
+            sh "cp '${jenkinsfiles}/Python/SetupCocosBuildSettings.py' '${pythonFile}'"
 
-                    // Execute script
-                    sh """
+            // Execute script
+            sh """
                 source '${venvPath}/bin/activate' && \
                 python3 '${pythonFile}' '${cocosProject}' '${bundleId}' '${productName}'
             """
 
-                    // 🔥 Cleanup after execution
-                    sh "rm -f '${pythonFile}'"
-                    echo '🧹 Cleanup: Deleted SetupCocosBuildSettings.py'
+            // 🔥 Cleanup after execution
+            sh "rm -f '${pythonFile}'"
+            echo '🧹 Cleanup: Deleted SetupCocosBuildSettings.py'
 
-                    echo '✅ Cocos build settings updated successfully.'
-                }
-            }
+            echo '✅ Cocos build settings updated successfully.'
         }
+    }
+}
+
 
 stage('Copy Plugin Files to Unity Project') {
-        when {
-                expression {
-                    return params.GAME_ENGINE == 'unity'
-                    params.TESTING == true
-                }
-            }
+    when {
+        expression {
+            return params.GAME_ENGINE == 'unity' && params.ENVIRONMENT == 'Testing'
+        }
+    }
     steps {
         script {
             echo '🔄 Copying plugin folders (Editor, Plugins, Scripts) to Unity project, excluding .meta files...'
@@ -441,7 +460,6 @@ stage('Copy Plugin Files to Unity Project') {
 
                     copiedScriptName = detectedCs.tokenize('/').last()
                     unityScriptPath = "${params.UNITY_PROJECT_PATH}/Assets/Scripts/${copiedScriptName}"
-
                 }
             }
 
@@ -451,7 +469,6 @@ stage('Copy Plugin Files to Unity Project') {
             }
 
             def editorfiles = "${env.WORKSPACE}/JenkinsFiles/UnityScripts/Editor"
-
             def editorTarget = "${params.UNITY_PROJECT_PATH}/Assets/Editor"
 
             echo "📂 Copying Editor scripts from ${editorfiles} to ${editorTarget}"
@@ -469,12 +486,13 @@ stage('Copy Plugin Files to Unity Project') {
 }
 
 
+
 stage('Save filenameMap.json') {
     when {
         expression {
             return params.GAME_ENGINE == 'unity' &&
                    params.COCOS_VERSION == 'cocos2' &&
-                   params.TESTING == true
+                   params.ENVIRONMENT == 'Testing'
         }
     }
     steps {
@@ -504,48 +522,52 @@ stage('Save filenameMap.json') {
 }
 
 
+
         stage('Add SharpZipLib Package via Package Manager') {
-                 when {
-                expression {
-                    return params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2'
-                }
-            }
-            steps {
-                script {
-                    def manifestPath = "${params.UNITY_PROJECT_PATH}/Packages/manifest.json"
-                    def packageName = 'com.unity.sharp-zip-lib'
-                    def packageVersion = '1.3.9'
+    when {
+        expression {
+            return params.GAME_ENGINE == 'unity' &&
+                   params.COCOS_VERSION == 'cocos2' &&
+                   params.ENVIRONMENT == 'Testing'
+        }
+    }
+    steps {
+        script {
+            def manifestPath = "${params.UNITY_PROJECT_PATH}/Packages/manifest.json"
+            def packageName = 'com.unity.sharp-zip-lib'
+            def packageVersion = '1.3.9'
 
-                    echo 'Checking Unity manifest.json for SharpZipLib package...'
+            echo 'Checking Unity manifest.json for SharpZipLib package...'
 
-                    // Read manifest.json content
-                    def manifestContent = readFile(manifestPath)
-                    if (manifestContent.contains(packageName)) {
-                        echo '✅ SharpZipLib already present in manifest.json.'
-                    }
-            else
-            {
-                        echo '🔧 Adding SharpZipLib to manifest.json...'
+            // Read manifest.json content
+            def manifestContent = readFile(manifestPath)
+            if (manifestContent.contains(packageName)) {
+                echo '✅ SharpZipLib already present in manifest.json.'
+            } else {
+                echo '🔧 Adding SharpZipLib to manifest.json...'
 
-                        // Use sed to insert the package
-                        sh """
-                tmpfile=\$(mktemp)
-                jq '.dependencies += {\"${packageName}\": \"${packageVersion}\"}' '${manifestPath}' > \$tmpfile && mv \$tmpfile '${manifestPath}'
+                // Use sed to insert the package
+                sh """
+                    tmpfile=\$(mktemp)
+                    jq '.dependencies += {\"${packageName}\": \"${packageVersion}\"}' '${manifestPath}' > \$tmpfile && mv \$tmpfile '${manifestPath}'
                 """
 
-                        echo '✅ SharpZipLib package added successfully!'
-            }
-                }
+                echo '✅ SharpZipLib package added successfully!'
             }
         }
+    }
+}
+
 
 
  stage('Setup Unity Project') {
-       when {
-                expression {
-                    return params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2'       
-                }
-            }
+    when {
+        expression {
+            return params.GAME_ENGINE == 'unity' &&
+                   params.COCOS_VERSION == 'cocos2' &&
+                   params.ENVIRONMENT == 'Testing'
+        }
+    }
     steps {
         script {
             def projectPath = params.UNITY_PROJECT_PATH
@@ -574,36 +596,41 @@ stage('Save filenameMap.json') {
 }
 
 
+
         stage('Trigger Unity Compilation (Auto Detect Unity Version)') {
-            when {
-                expression { params.GAME_ENGINE == 'unity' }
-            }
-            steps {
-                script {
-                    def projectPath = params.UNITY_PROJECT_PATH
-                    def versionFile = "${projectPath}/ProjectSettings/ProjectVersion.txt"
+    when {
+        expression {
+            return params.GAME_ENGINE == 'unity' &&
+                   params.ENVIRONMENT == 'Testing'
+        }
+    }
+    steps {
+        script {
+            def projectPath = params.UNITY_PROJECT_PATH
+            def versionFile = "${projectPath}/ProjectSettings/ProjectVersion.txt"
 
-                    echo "Reading Unity version from: ${versionFile}"
+            echo "Reading Unity version from: ${versionFile}"
 
-                    def unityVersion = sh(
+            def unityVersion = sh(
                 script: "grep 'm_EditorVersion:' '${versionFile}' | awk '{print \$2}'",
                 returnStdout: true
             ).trim()
 
-                    echo "Detected Unity version: ${unityVersion}"
+            echo "Detected Unity version: ${unityVersion}"
 
-                    def unityPath = "/Applications/Unity/Hub/Editor/${unityVersion}/Unity.app/Contents/MacOS/Unity"
+            def unityPath = "/Applications/Unity/Hub/Editor/${unityVersion}/Unity.app/Contents/MacOS/Unity"
 
-                    echo "Triggering Unity (${unityVersion}) to refresh and compile the project using binary at: ${unityPath}"
+            echo "Triggering Unity (${unityVersion}) to refresh and compile the project using binary at: ${unityPath}"
 
-                    sh """
+            sh """
                 '${unityPath}' -quit -batchmode -projectPath '${projectPath}'
             """
 
-                    echo "✅ Unity compilation triggered successfully with version ${unityVersion}."
-                }
-            }
+            echo "✅ Unity compilation triggered successfully with version ${unityVersion}."
         }
+    }
+}
+
 
         stage('Parallel Tasks') {
             parallel {
@@ -687,39 +714,40 @@ stage('Save filenameMap.json') {
             }
         }
         stage('Cleanup Unity Editor Scripts') {
-               when {
-                expression {
-                    return params.GAME_ENGINE == 'unity' &&
-                    params.TESTING == false
-                }
-            }
-            steps {
-                script {
-                    def targetEditorPath = "${params.UNITY_PROJECT_PATH}/Assets/Editor"
-                    def helperScript = "${targetEditorPath}/BuildHelper.cs"
-                    def unityprojectsetupscript = "${targetEditorPath}/SetupUnityProject.cs"
-
-                    echo '🧹 Cleaning up temporary editor scripts...'
-
-                    // Delete if exists
-                    if (fileExists(helperScript)) {
-                        sh "rm -f '${helperScript}'"
-                        echo '✅ Deleted BuildHelper.cs'
-            } else {
-                        echo '⚠️ BuildHelper.cs not found, skipping'
-                    }
-
-                    if (fileExists(unityprojectsetupscript)) {
-                        sh "rm -f '${unityprojectsetupscript}'"
-                        echo '✅ Deleted SetupUnityProject.cs'
-            } else {
-                        echo '⚠️ SetupUnityProject.cs not found, skipping'
-                    }
-
-                    echo '🧼 Editor script cleanup complete.'
-                }
-            }
+    when {
+        expression {
+            return params.GAME_ENGINE == 'unity' &&
+                   params.ENVIRONMENT == 'Production'
         }
+    }
+    steps {
+        script {
+            def targetEditorPath = "${params.UNITY_PROJECT_PATH}/Assets/Editor"
+            def helperScript = "${targetEditorPath}/BuildHelper.cs"
+            def unityprojectsetupscript = "${targetEditorPath}/SetupUnityProject.cs"
+
+            echo '🧹 Cleaning up temporary editor scripts...'
+
+            // Delete if exists
+            if (fileExists(helperScript)) {
+                sh "rm -f '${helperScript}'"
+                echo '✅ Deleted BuildHelper.cs'
+            } else {
+                echo '⚠️ BuildHelper.cs not found, skipping'
+            }
+
+            if (fileExists(unityprojectsetupscript)) {
+                sh "rm -f '${unityprojectsetupscript}'"
+                echo '✅ Deleted SetupUnityProject.cs'
+            } else {
+                echo '⚠️ SetupUnityProject.cs not found, skipping'
+            }
+
+            echo '🧼 Editor script cleanup complete.'
+        }
+    }
+}
+
 
         stage('Copy Cocos Build to Jenkins Build Folder') {
             when {
