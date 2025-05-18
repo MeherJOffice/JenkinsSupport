@@ -21,7 +21,9 @@ if not os.path.isdir(cocos_xcodeproj):
 # Extract sanitized workspace name from unity xcodeproj folder
 unity_project_folder = os.path.dirname(unity_xcodeproj)
 project_root = os.path.dirname(unity_project_folder)
-product_name = os.path.basename(unity_project_folder)
+
+unity_project_Name = os.path.dirname(os.path.dirname(unity_xcodeproj))
+product_name = os.path.basename(unity_project_Name)
 sanitized_name = ''.join(e for e in product_name if e.isalnum())
 
 workspace_folder = os.path.join(project_root, "XcodeWorkspace")
