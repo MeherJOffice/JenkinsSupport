@@ -924,13 +924,14 @@ stage('Save filenameMap.json') {
             }
         }
 
-        stage('Copy functionsMap.json to Cocos Build') {
-              when {
-                expression {
-                    return params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2'  &&
-                    params.TESTING == true
-                }
-            }
+       stage('Copy functionsMap.json to Cocos Build') {
+    when {
+        expression {
+            return params.GAME_ENGINE == 'unity' &&
+                   params.COCOS_VERSION == 'cocos2' &&
+                   params.ENVIRONMENT == 'Testing'
+        }
+    }
     steps {
         script {
             def productName = sh(
@@ -952,6 +953,7 @@ stage('Save filenameMap.json') {
         }
     }
 }
+
 
 
         stage('📂 Open Game Build Folder') {
