@@ -640,7 +640,11 @@ pipeline {
                             echo '🚀 Preparing Cocos project build...'
 
                             // Define Cocos Creator executable path
-                            def cocosCreatorPath =  ${ env.COCOS_CREATOR_213_PATH }
+                            def cocosCreatorPath = env.COCOS_CREATOR_213_PATH
+
+                            if (!cocosCreatorPath?.trim()) {
+                                error '❌ Environment variable COCOS_CREATOR_213_PATH is not set!'
+                            }
 
                             // Clean old build folder if it exists
                             def oldBuildPath = "${params.COCOS_PROJECT_PATH}/build"
