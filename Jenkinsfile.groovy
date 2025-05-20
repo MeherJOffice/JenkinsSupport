@@ -20,16 +20,28 @@ pipeline {
         COCOS_CREATOR_373_PATH = "${COCOS_CREATOR_373_PATH}"
     }
     stages {
-        stage('Check Cocos Creator Path') {
+        stage('Check Cocos 213 Creator Path') {
+              when {
+                expression { params.COCOS_VERSION == 'cocos2' }
+            }
             steps {
                 script {
-                    if (!env.COCOS_CREATOR_213_PATH?.trim()) {
+                    if (!env.COCOS_CREATOR_213_PATH?.trim()) 
+                    {
                         error '❌ Environment variable COCOS_CREATOR_213_PATH is not set. Please define it under Jenkins > Manage Jenkins > Global properties.'
                     }
-
-                    echo "📌 Using Cocos Creator path: ${env.COCOS_CREATOR_213_PATH}"
-                    sh "'${env.COCOS_CREATOR_213_PATH}' --version"
-                }
+            }
+        }
+        stage('Check Cocos 373 Creator Path') {
+              when {
+                expression { params.COCOS_VERSION == 'cocos3' }
+            }
+            steps {
+                script {
+                    if (!env.COCOS_CREATOR_373_PATH?.trim()) 
+                    {
+                        error '❌ Environment variable COCOS_CREATOR_373_PATH is not set. Please define it under Jenkins > Manage Jenkins > Global properties.'
+                    }
             }
         }
         stage('Reset Plugin Repo') {
