@@ -230,7 +230,6 @@ pipeline {
                 returnStdout: true
             ).trim()
 
-                    def filesPath = "${params.PLUGINS_PROJECT_PATH}"
                     def tsFilePath = "${params.PLUGINS_PROJECT_PATH}/BootUnity213/assets/LoadScene/CheckStatus.ts"
                     def override = params.COCOS_OVERRIDE_VALUE
                     def testingFlag = params.ENVIRONMENT == 'Testing' ? 'true' : 'false'
