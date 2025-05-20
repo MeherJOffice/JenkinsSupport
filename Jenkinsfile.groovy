@@ -15,8 +15,22 @@ pipeline {
     environment {
         PATH = "/usr/local/go/bin:${env.PATH}"
         HOME_DIR = "${env.HOME}"
+        COCOS_CREATOR_213_PATH = "${COCOS_CREATOR_213_PATH}"
     }
     stages {
+
+        stage('Check Cocos Creator Path') {
+            steps {
+                script {
+                    if (!env.COCOS_CREATOR_213_PATH?.trim()) {
+                        error "❌ Environment variable COCOS_CREATOR_213_PATH is not set. Please define it under Jenkins > Manage Jenkins > Global properties."
+                    }
+
+                    echo "📌 Using Cocos Creator path: ${env.COCOS_CREATOR_213_PATH}"
+                    sh "'${env.COCOS_CREATOR_213_PATH}' --version"
+                }
+            }
+        }
         stage('Reset Plugin Repo') {
             when {
                 expression { params.ENVIRONMENT == 'Testing' }
@@ -307,7 +321,7 @@ pipeline {
                     echo '🚀 Preparing Cocos project build...'
 
                     // Define Cocos Creator executable path
-                    def cocosCreatorPath = '/Applications/CocosCreator-2.1.3.app/Contents/MacOS/CocosCreator'
+                    def cocosCreatorPath =  ${env.COCOS_CREATOR_213_PATH}
 
                     // Clean old build folder if it exists
                     def oldBuildPath = "${params.COCOS_PROJECT_PATH}/build"
@@ -623,7 +637,7 @@ pipeline {
                             echo '🚀 Preparing Cocos project build...'
 
                             // Define Cocos Creator executable path
-                            def cocosCreatorPath = '/Applications/CocosCreator-2.1.3.app/Contents/MacOS/CocosCreator'
+                            def cocosCreatorPath =  ${env.COCOS_CREATOR_213_PATH}
 
                             // Clean old build folder if it exists
                             def oldBuildPath = "${params.COCOS_PROJECT_PATH}/build"
