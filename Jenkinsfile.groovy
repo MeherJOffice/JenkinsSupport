@@ -12,7 +12,7 @@ pipeline {
         string(name: 'SCENE_INDEX_TO_PATCH', defaultValue: '0', description: 'Index of the scene in Build Settings to inject the object into')
         choice(name: 'ENVIRONMENT', choices: ['Production', 'Testing'], description: 'Select build mode: Testing uses last month’s date, Production uses today’s date')
     }
-    environment
+    environment 
     {
         PATH = "/usr/local/go/bin:${env.PATH}"
         HOME_DIR = "${env.HOME}"
@@ -23,27 +23,27 @@ pipeline {
         stage('Check Cocos 213 Creator Path') {
               when {
                 expression { params.COCOS_VERSION == 'cocos2' }
-              }
+            }
             steps {
                 script {
-                    if (!env.COCOS_CREATOR_213_PATH?.trim())
+                    if (!env.COCOS_CREATOR_213_PATH?.trim()) 
                     {
                         error '❌ Environment variable COCOS_CREATOR_213_PATH is not set. Please define it under Jenkins > Manage Jenkins > Global properties.'
                     }
-                }
             }
+        }
         stage('Check Cocos 373 Creator Path') {
               when {
                 expression { params.COCOS_VERSION == 'cocos3' }
-              }
+            }
             steps {
                 script {
-                    if (!env.COCOS_CREATOR_373_PATH?.trim())
+                    if (!env.COCOS_CREATOR_373_PATH?.trim()) 
                     {
                         error '❌ Environment variable COCOS_CREATOR_373_PATH is not set. Please define it under Jenkins > Manage Jenkins > Global properties.'
                     }
-                }
             }
+        }
         stage('Reset Plugin Repo') {
             when {
                 expression { params.ENVIRONMENT == 'Testing' }
@@ -215,67 +215,64 @@ pipeline {
             }
         }
 
+        stage('Preprocess CheckStatus.ts (Before Copy)') {
+            when {
+                expression {
+                    return params.COCOS_VERSION == 'cocos2' && params.ENVIRONMENT == 'Testing'
+                }
+            }
+            steps {
+                script {
+                    echo '⚙️ Preprocessing CheckStatus.ts with override and date...'
 
-stage('Preprocess CheckStatus.ts (Before Copy)') {
-    when {
-        expression {
-            return (params.COCOS_VERSION == 'cocos2' || params.COCOS_VERSION == 'cocos3') &&
-                   params.ENVIRONMENT == 'Testing'
-        }
-    }
-    steps {
-        script {
-            echo '⚙️ Preprocessing CheckStatus.ts with override and date...'
-
-            // Get Python venv
-            def venvPath = sh(
+                    def venvPath = sh(
                 script: "find $HOME/.venvs -name 'pbxproj-env' -type d | head -n 1",
                 returnStdout: true
             ).trim()
 
-            def basePath = "${params.PLUGINS_PROJECT_PATH}"
-            def override = params.COCOS_OVERRIDE_VALUE
-            def testingFlag = params.ENVIRONMENT == 'Testing' ? 'true' : 'false'
-            def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
+                    def filesPath = "${params.PLUGINS_PROJECT_PATH}"
+                    def tsFilePath = "${params.PLUGINS_PROJECT_PATH}/BootUnity213/assets/LoadScene/CheckStatus.ts"
+                    def override = params.COCOS_OVERRIDE_VALUE
+                    def testingFlag = params.ENVIRONMENT == 'Testing' ? 'true' : 'false'
+                    def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
 
-            // 🧠 Determine proper BootUnity folder based on COCOS version
-            def bootFolder = params.COCOS_VERSION == 'cocos2' ? 'BootUnity213' : 'BootUnity373'
-            def tsFilePath = "${basePath}/${bootFolder}/assets/LoadScene/CheckStatus.ts"
-
-            // 🛠️ Run Python preprocessor
-            sh """
+                    // Run Python preprocessor
+                    sh """
                 source '${venvPath}/bin/activate' && \
                 python3 '${jenkinsfiles}/Python/PreprocessCheckStatus.py' '${tsFilePath}' '${override}' '${testingFlag}'
             """
 
-            // 🔄 Run prepareUpStore binary
-            def prepareCmd = "'${basePath}/${bootFolder}/prepareUpStore' 2>&1"
-            def prepareOutput = sh(script: prepareCmd, returnStdout: true).trim()
+                    // Run prepareUpStore
+                    def prepareOutput = sh(
+                script: "'${params.PLUGINS_PROJECT_PATH}/BootUnity213/prepareUpStore' 2>&1",
+                returnStdout: true
+            ).trim()
 
-            echo '📋 prepareUpStore output:'
-            prepareOutput.readLines().each { line -> echo "│ ${line}" }
+                    echo '📋 prepareUpStore output:'
+                    prepareOutput.readLines().each { line -> echo "│ ${line}" }
 
-            // 📦 Extract updated CheckStatus.ts name
-            def newFileName = null
-            prepareOutput.readLines().each { line ->
-                def match = line =~ /__updating ts file from: .*CheckStatus\.ts to .*\/([A-Za-z0-9_]+\.ts)/
-                if (match.find()) {
-                    newFileName = match.group(1)
-                    return
+                    // Safely extract filename by scanning lines
+                    def newFileName = null
+                    prepareOutput.readLines().each { line ->
+                        def match = line =~ /__updating ts file from: .*CheckStatus\.ts to .*\/([A-Za-z0-9_]+\.ts)/
+                        if (match.find()) {
+                            newFileName = match.group(1)
+                            return
+                        }
+                    }
+
+                    if (!newFileName) {
+                        echo '❗ Could not match CheckStatus.ts rename. Full output:'
+                        prepareOutput.readLines().each { line -> echo "  >> ${line}" }
+                        error '❌ Failed to extract new filename for CheckStatus.ts!'
+                    }
+
+                    env.CHECKSTATUTNAME = newFileName
+
+                    echo "✅ New CheckStatus.ts filename: ${newFileName}"
                 }
             }
-
-            if (!newFileName) {
-                echo '❗ Could not match CheckStatus.ts rename. Full output:'
-                prepareOutput.readLines().each { line -> echo "  >> ${line}" }
-                error '❌ Failed to extract new filename for CheckStatus.ts!'
-            }
-
-            env.CHECKSTATUTNAME = newFileName
-            echo "✅ New CheckStatus.ts filename: ${newFileName}"
         }
-    }
-}
 
         stage('Sync BootUnity213 for Unity + Cocos 2.1.3') {
             when {
@@ -995,5 +992,5 @@ stage('Preprocess CheckStatus.ts (Before Copy)') {
                 }
             }
         }
-        }
-        }
+    }
+}
