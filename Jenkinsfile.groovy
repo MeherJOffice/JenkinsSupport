@@ -12,10 +12,12 @@ pipeline {
         string(name: 'SCENE_INDEX_TO_PATCH', defaultValue: '0', description: 'Index of the scene in Build Settings to inject the object into')
         choice(name: 'ENVIRONMENT', choices: ['Production', 'Testing'], description: 'Select build mode: Testing uses last month’s date, Production uses today’s date')
     }
-    environment {
+    environment 
+    {
         PATH = "/usr/local/go/bin:${env.PATH}"
         HOME_DIR = "${env.HOME}"
         COCOS_CREATOR_213_PATH = "${COCOS_CREATOR_213_PATH}"
+        COCOS_CREATOR_373_PATH = "${COCOS_CREATOR_373_PATH}"
     }
     stages {
         stage('Check Cocos Creator Path') {
