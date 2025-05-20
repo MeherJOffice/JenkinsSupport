@@ -4,7 +4,7 @@ pipeline {
     parameters {
         string(name: 'UNITY_PROJECT_PATH', defaultValue: '/Users/meher/Documents/GitHub/Games-Meher/Fact Or Lie', description: 'Local path to Unity project')
         string(name: 'PLUGINS_PROJECT_PATH', defaultValue: '/Users/meher/Documents/GitHub/UpStoreTools', description: 'Local path to Plugins repo')
-        string(name: 'COCOS_PROJECT_PATH', defaultValue: '/Users/meher/Documents/GitHub/SDKForJenkins/JenkensCocos2unity', description: 'Cocos project path')
+        string(name: 'COCOS_PROJECT_PATH', defaultValue: '/Users/meher/Documents/GitHub/CocosProjectsSDK/JenkinsSDK373', description: 'Cocos project path')
         text(name: 'UNITY_OVERRIDE_VALUE' , description: 'Override value for Unity')
         string(name: 'COCOS_OVERRIDE_VALUE' , description: 'Override value for Cocos')
         choice(name: 'COCOS_VERSION', choices: ['cocos2', 'cocos3'], description: 'Cocos version')
@@ -12,7 +12,7 @@ pipeline {
         string(name: 'SCENE_INDEX_TO_PATCH', defaultValue: '0', description: 'Index of the scene in Build Settings to inject the object into')
         choice(name: 'ENVIRONMENT', choices: ['Production', 'Testing'], description: 'Select build mode: Testing uses last month’s date, Production uses today’s date')
     }
-    environment 
+    environment
     {
         PATH = "/usr/local/go/bin:${env.PATH}"
         HOME_DIR = "${env.HOME}"
@@ -23,27 +23,27 @@ pipeline {
         stage('Check Cocos 213 Creator Path') {
               when {
                 expression { params.COCOS_VERSION == 'cocos2' }
-            }
+              }
             steps {
                 script {
-                    if (!env.COCOS_CREATOR_213_PATH?.trim()) 
+                    if (!env.COCOS_CREATOR_213_PATH?.trim())
                     {
                         error '❌ Environment variable COCOS_CREATOR_213_PATH is not set. Please define it under Jenkins > Manage Jenkins > Global properties.'
                     }
+                }
             }
-        }
         stage('Check Cocos 373 Creator Path') {
               when {
                 expression { params.COCOS_VERSION == 'cocos3' }
-            }
+              }
             steps {
                 script {
-                    if (!env.COCOS_CREATOR_373_PATH?.trim()) 
+                    if (!env.COCOS_CREATOR_373_PATH?.trim())
                     {
                         error '❌ Environment variable COCOS_CREATOR_373_PATH is not set. Please define it under Jenkins > Manage Jenkins > Global properties.'
                     }
+                }
             }
-        }
         stage('Reset Plugin Repo') {
             when {
                 expression { params.ENVIRONMENT == 'Testing' }
@@ -214,61 +214,101 @@ pipeline {
                 }
             }
         }
+stage('Preprocess CheckStatus.ts (Before Copy)') {
+    when {
+        expression {
+            return (params.COCOS_VERSION == 'cocos2' || params.COCOS_VERSION == 'cocos3') &&
+                   params.ENVIRONMENT == 'Testing'
+        }
+    }
+    steps {
+        script {
+            echo '⚙️ Preprocessing CheckStatus.ts with override and date...'
 
-        stage('Preprocess CheckStatus.ts (Before Copy)') {
-            when {
-                expression {
-                    return params.COCOS_VERSION == 'cocos2' && params.ENVIRONMENT == 'Testing'
-                }
-            }
-            steps {
-                script {
-                    echo '⚙️ Preprocessing CheckStatus.ts with override and date...'
-
-                    def venvPath = sh(
+            // Get Python venv
+            def venvPath = sh(
                 script: "find $HOME/.venvs -name 'pbxproj-env' -type d | head -n 1",
                 returnStdout: true
             ).trim()
 
-                    def tsFilePath = "${params.PLUGINS_PROJECT_PATH}/BootUnity213/assets/LoadScene/CheckStatus.ts"
-                    def override = params.COCOS_OVERRIDE_VALUE
-                    def testingFlag = params.ENVIRONMENT == 'Testing' ? 'true' : 'false'
-                    def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
+            def basePath = "${params.PLUGINS_PROJECT_PATH}"
+            def override = params.COCOS_OVERRIDE_VALUE
+            def testingFlag = params.ENVIRONMENT == 'Testing' ? 'true' : 'false'
+            def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
 
-                    // Run Python preprocessor
-                    sh """
+            // 🧠 Determine proper BootUnity folder based on COCOS version
+            def bootFolder = params.COCOS_VERSION == 'cocos2' ? 'BootUnity213' : 'BootUnity373'
+            def tsFilePath = "${basePath}/${bootFolder}/assets/LoadScene/CheckStatus.ts"
+
+            // 🛠️ Run Python preprocessor
+            sh """
                 source '${venvPath}/bin/activate' && \
                 python3 '${jenkinsfiles}/Python/PreprocessCheckStatus.py' '${tsFilePath}' '${override}' '${testingFlag}'
             """
 
-                    // Run prepareUpStore
-                    def prepareOutput = sh(
-                script: "'${params.PLUGINS_PROJECT_PATH}/BootUnity213/prepareUpStore' 2>&1",
-                returnStdout: true
-            ).trim()
+            // 🔄 Run prepareUpStore binary
+            def prepareCmd = "'${basePath}/${bootFolder}/prepareUpStore' 2>&1"
+            def prepareOutput = sh(script: prepareCmd, returnStdout: true).trim()
 
-                    echo '📋 prepareUpStore output:'
-                    prepareOutput.readLines().each { line -> echo "│ ${line}" }
+            echo '📋 prepareUpStore output:'
+            prepareOutput.readLines().each { line -> echo "│ ${line}" }
 
-                    // Safely extract filename by scanning lines
-                    def newFileName = null
-                    prepareOutput.readLines().each { line ->
-                        def match = line =~ /__updating ts file from: .*CheckStatus\.ts to .*\/([A-Za-z0-9_]+\.ts)/
-                        if (match.find()) {
-                            newFileName = match.group(1)
-                            return
-                        }
+            // 📦 Extract updated CheckStatus.ts name
+            def newFileName = null
+            prepareOutput.readLines().each { line ->
+                def match = line =~ /__updating ts file from: .*CheckStatus\.ts to .*\/([A-Za-z0-9_]+\.ts)/
+                if (match.find()) {
+                    newFileName = match.group(1)
+                    return
+                }
+            }
+
+            if (!newFileName) {
+                echo '❗ Could not match CheckStatus.ts rename. Full output:'
+                prepareOutput.readLines().each { line -> echo "  >> ${line}" }
+                error '❌ Failed to extract new filename for CheckStatus.ts!'
+            }
+
+            env.CHECKSTATUTNAME = newFileName
+            echo "✅ New CheckStatus.ts filename: ${newFileName}"
+        }
+    }
+}
+stage('Sync BootUnity373 for Unity + Cocos 3.7.3') {
+            when {
+                expression {
+                    return params.GAME_ENGINE == 'unity' &&
+                   params.COCOS_VERSION == 'cocos2' &&
+                   params.ENVIRONMENT == 'Testing'
+                }
+            }
+            steps {
+                script {
+                    echo '🔄 Syncing BootUnity373 into Cocos project...'
+
+                    def pluginRepo = "${params.PLUGINS_PROJECT_PATH}"
+                    def cocosProjectPath = "${params.COCOS_PROJECT_PATH}"
+
+                    // Paths to copy from
+                    def bootUnityPath = "${pluginRepo}/BootUnity373"
+
+                    // Items to copy
+                    def foldersToCopy = ['assets']
+
+                    foldersToCopy.each { folder ->
+                        copyCommands << "rm -rf '${cocosProjectPath}/${folder}'"
+                        copyCommands << "cp -R '${bootUnityPath}/${folder}' '${cocosProjectPath}/'"
                     }
 
-                    if (!newFileName) {
-                        echo '❗ Could not match CheckStatus.ts rename. Full output:'
-                        prepareOutput.readLines().each { line -> echo "  >> ${line}" }
-                        error '❌ Failed to extract new filename for CheckStatus.ts!'
-                    }
+                    sh """
+                set -e
+                echo "📁 Plugin repo path: ${pluginRepo}"
+                echo "🎮 Cocos project path: ${cocosProjectPath}"
 
-                    env.CHECKSTATUTNAME = newFileName
+                ${copyCommands.join('\n')}
 
-                    echo "✅ New CheckStatus.ts filename: ${newFileName}"
+                echo "✅ BootUnity373 synced successfully."
+            """
                 }
             }
         }
@@ -325,7 +365,7 @@ pipeline {
             when {
                 expression {
                     return params.GAME_ENGINE == 'unity' &&
-                   params.COCOS_VERSION == 'cocos2' &&
+                   params.COCOS_VERSION == 'cocos3' &&
                    params.ENVIRONMENT == 'Testing'
                 }
             }
@@ -334,10 +374,10 @@ pipeline {
                     echo '🚀 Preparing Cocos project build...'
 
                     // Define Cocos Creator executable path
-                    def cocosCreatorPath = env.COCOS_CREATOR_213_PATH
+                    def cocosCreatorPath = env.COCOS_CREATOR_373_PATH
 
                     if (!cocosCreatorPath?.trim()) {
-                        error '❌ Environment variable COCOS_CREATOR_213_PATH is not set!'
+                        error '❌ Environment variable COCOS_CREATOR_373_PATH is not set!'
                     }
 
                     // Clean old build folder if it exists
@@ -991,5 +1031,5 @@ pipeline {
                 }
             }
         }
-    }
-}
+        }
+        }
