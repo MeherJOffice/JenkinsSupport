@@ -35,6 +35,22 @@ pipeline {
                 }
             }
         }
+          stage('Check Cocos 373 Creator Path') {
+            when {
+                expression {
+                    return params.COCOS_VERSION == 'cocos3'
+                }
+            }
+            steps {
+                script {
+                    if (!env.COCOS_CREATOR_213_PATH?.trim()) {
+                        error '❌ Environment variable COCOS_CREATOR_213_PATH is not set.'
+                    }
+
+                    echo "📌 Using Cocos Creator path: ${env.COCOS_CREATOR_213_PATH}"
+                }
+            }
+        }
         stage('Reset Plugin Repo') {
             when {
                 expression { params.ENVIRONMENT == 'Testing' }
