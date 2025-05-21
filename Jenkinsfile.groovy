@@ -55,10 +55,10 @@ pipeline {
 
         stage('Clean & Update Dates') {
             when {
-                allOf {
-                    expression { params.GAME_ENGINE == 'unity' }
-                    expression { params.ENVIRONMENT == 'Production' }
-                    expression { params.COCOS_VERSION == 'cocos2' || params.COCOS_VERSION == 'cocos3' }
+                expression {
+                    return (params.COCOS_VERSION == 'cocos2' || params.COCOS_VERSION == 'cocos3') &&
+                    params.GAME_ENGINE == 'unity' &&
+                   params.ENVIRONMENT == 'Production'
                 }
             }
             steps {
@@ -110,54 +110,25 @@ pipeline {
             }
         }
 
-        stage('Sync BootUnity213 for Unity + Cocos 2.1.3') {
+        stage('Sync BootUnity Folder') {
             when {
                 expression {
                     return params.GAME_ENGINE == 'unity' &&
-                   params.COCOS_VERSION == 'cocos2' &&
+                   (params.COCOS_VERSION == 'cocos2' || params.COCOS_VERSION == 'cocos3') &&
                    params.ENVIRONMENT == 'Testing'
                 }
             }
             steps {
                 script {
-                    echo '🔄 Syncing BootUnity213 into Cocos project...'
-
-                    def pluginRepo = "${params.PLUGINS_PROJECT_PATH}"
-                    def cocosProjectPath = "${params.COCOS_PROJECT_PATH}"
-
-                    // Paths to copy from
-                    def bootUnityPath = "${pluginRepo}/BootUnity213"
-
-                    // Items to copy
-                    def foldersToCopy = ['assets', 'build-templates', 'settings']
-                    def filesToCopy = ['changeLibCC', 'creator.d.ts', 'jsconfig.json', 'project.json']
-
-                    // Build copy command
-                    def copyCommands = []
-
-                    foldersToCopy.each { folder ->
-                        copyCommands << "rm -rf '${cocosProjectPath}/${folder}'"
-                        copyCommands << "cp -R '${bootUnityPath}/${folder}' '${cocosProjectPath}/'"
-                    }
-
-                    filesToCopy.each { file ->
-                        copyCommands << "rm -f '${cocosProjectPath}/${file}'"
-                        copyCommands << "cp '${bootUnityPath}/${file}' '${cocosProjectPath}/'"
-                    }
-
-                    sh """
-                set -e
-                echo "📁 Plugin repo path: ${pluginRepo}"
-                echo "🎮 Cocos project path: ${cocosProjectPath}"
-
-                ${copyCommands.join('\n')}
-
-                echo "✅ BootUnity213 synced successfully."
-            """
+                    syncBootUnity([
+                cocosVersion     : params.COCOS_VERSION,
+                pluginsPath      : params.PLUGINS_PROJECT_PATH,
+                cocosProjectPath : params.COCOS_PROJECT_PATH
+            ])
                 }
             }
         }
-
+    
         stage('Build Cocos Project') {
             when {
                 expression {
