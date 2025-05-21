@@ -28,7 +28,7 @@ pipeline {
             steps {
                 script {
                     if (!env.COCOS_CREATOR_213_PATH?.trim()) {
-                        error '❌ Environment variable COCOS_CREATOR_213_PATH is not set. Please define it under Jenkins > Manage Jenkins > Global properties.'
+                        error '❌ Environment variable COCOS_CREATOR_213_PATH is not set.'
                     }
 
                     echo "📌 Using Cocos Creator path: ${env.COCOS_CREATOR_213_PATH}"
@@ -44,7 +44,7 @@ pipeline {
             steps {
                 script {
                     if (!env.COCOS_CREATOR_373_PATH?.trim()) {
-                        error '❌ Environment variable COCOS_CREATOR_373_PATH is not set. Please define it under Jenkins > Manage Jenkins > Global properties.'
+                        error '❌ Environment variable COCOS_CREATOR_373_PATH is not set.'
                     }
 
                     echo "📌 Using Cocos Creator path: ${env.COCOS_CREATOR_373_PATH}"
