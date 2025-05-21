@@ -1,3 +1,4 @@
+@Library('jenkins-shared-lib') _
 pipeline {
     agent any
 
@@ -12,6 +13,7 @@ pipeline {
         string(name: 'SCENE_INDEX_TO_PATCH', defaultValue: '0', description: 'Index of the scene in Build Settings to inject the object into')
         choice(name: 'ENVIRONMENT', choices: ['Production', 'Testing'], description: 'Select build mode: Testing uses last month’s date, Production uses today’s date')
     }
+
     environment {
         PATH = "/usr/local/go/bin:${env.PATH}"
         HOME_DIR = "${env.HOME}"
@@ -20,7 +22,7 @@ pipeline {
     }
     stages {
         stage('Check Cocos Creator Path') {
-              when {
+            when {
                 expression {
                     return params.COCOS_VERSION == 'cocos2'
                 }
@@ -36,40 +38,17 @@ pipeline {
             }
         }
         stage('Reset Plugin Repo') {
-            when {
-                expression { params.ENVIRONMENT == 'Testing' }
-            }
             steps {
                 script {
-                    def pluginPath = params.PLUGINS_PROJECT_PATH
-
-                    echo "🧹 Cleaning Git repo at: ${pluginPath}"
-
-                    sh """
-                cd '${pluginPath}'
-                git reset --hard HEAD
-                git clean -fd
-            """
-
-                    echo '✅ Plugin repo reset to a clean state.'
+                    resetPluginRepo(params.PLUGINS_PROJECT_PATH)
                 }
             }
         }
 
         stage('Validate Paths') {
             steps {
-                echo "Unity Project Path: ${params.UNITY_PROJECT_PATH}"
-                echo "Plugins Repo Path: ${params.PLUGINS_PROJECT_PATH}"
-                echo "Selected Engine: ${params.GAME_ENGINE}"
-                echo "Selected Cocos Version: ${params.COCOS_VERSION}"
-
                 script {
-                    if (!fileExists("${params.UNITY_PROJECT_PATH}")) {
-                        error("Unity project path does not exist: ${params.UNITY_PROJECT_PATH}")
-                    }
-                    if (!fileExists("${params.PLUGINS_PROJECT_PATH}")) {
-                        error("Plugins repo path does not exist: ${params.PLUGINS_PROJECT_PATH}")
-                    }
+                    validatePaths(params.UNITY_PROJECT_PATH, params.PLUGINS_PROJECT_PATH)
                 }
             }
         }
@@ -158,7 +137,7 @@ pipeline {
             }
         }
 
-        stage('Preprocess FE2In.cs (Unity Script)') {
+        stage('Preprocess FE2In.cs') {
             when {
                 expression {
                     return params.GAME_ENGINE == 'unity' && params.ENVIRONMENT == 'Testing'
@@ -166,42 +145,12 @@ pipeline {
             }
             steps {
                 script {
-                    echo '🧠 Preprocessing FE2In.cs...'
-
-                    def venvPath = sh(
-                script: "find $HOME/.venvs -name 'pbxproj-env' -type d | head -n 1",
-                returnStdout: true
-            ).trim()
-
-                    if (!venvPath) {
-                        error '❌ Virtual environment not found!'
-                    }
-                    echo "✅ Found VENV at: ${venvPath}"
-
-                    def fe2inScript = "${params.PLUGINS_PROJECT_PATH}/unityProj/Assets/Scripts/FE2In.cs"
-                    def fe2inPy = "${fe2inScript}.py"
-                    def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
-
-                    // Convert ENVIRONMENT to 'true' or 'false' for the Python script
-                    def isTesting = params.ENVIRONMENT == 'Testing' ? 'true' : 'false'
-
-                    // Copy the Python script next to the C# script
-                    sh "cp '${jenkinsfiles}/Python/PreprocessFE2In.py' '${fe2inPy}'"
-
-                    // Run the Python script
-                    sh """
-                source '${venvPath}/bin/activate' && \
-                python3 '${fe2inPy}' '${fe2inScript}' '${params.UNITY_OVERRIDE_VALUE}' '${isTesting}'
-            """
-
-                    // Run Unity script modifier
-                    sh "chmod +x '${params.PLUGINS_PROJECT_PATH}/shuffleAndRandomizeCode'"
-                    sh "'${params.PLUGINS_PROJECT_PATH}/shuffleAndRandomizeCode'"
-
-                    // 🔥 Delete the temporary Python script
-                    sh "rm -f '${fe2inPy}'"
-
-                    echo '✅ FE2In.cs processed and temporary files cleaned.'
+                    preprocessFE2In([
+                        pluginPath: params.PLUGINS_PROJECT_PATH,
+                        jenkinsFiles: "${env.WORKSPACE}/JenkinsFiles",
+                        override: params.UNITY_OVERRIDE_VALUE,
+                        isTesting: 'true'
+                    ])
                 }
             }
         }
@@ -316,41 +265,16 @@ pipeline {
             when {
                 expression {
                     return params.GAME_ENGINE == 'unity' &&
-                   params.COCOS_VERSION == 'cocos2' &&
-                   params.ENVIRONMENT == 'Testing'
+                           (params.COCOS_VERSION == 'cocos2' || params.COCOS_VERSION == 'cocos3') &&
+                           params.ENVIRONMENT == 'Testing'
                 }
             }
             steps {
                 script {
-                    echo '🚀 Preparing Cocos project build...'
-
-                    // Define Cocos Creator executable path
-                    def cocosCreatorPath = env.COCOS_CREATOR_213_PATH
-
-                    if (!cocosCreatorPath?.trim()) {
-                        error '❌ Environment variable COCOS_CREATOR_213_PATH is not set!'
-                    }
-
-                    // Clean old build folder if it exists
-                    def oldBuildPath = "${params.COCOS_PROJECT_PATH}/build"
-                    echo "🧹 Checking and cleaning old build at: ${oldBuildPath}"
-
-                    sh """
-                if [ -d '${oldBuildPath}' ]; then
-                    echo "🗑️ Old build found. Deleting..."
-                    rm -rf '${oldBuildPath}'
-                else
-                    echo "✅ No old build to clean."
-                fi
-            """
-
-                    // Start building
-                    echo '🚀 Starting fresh Cocos project build...'
-                    sh """
-                '${cocosCreatorPath}' --path '${params.COCOS_PROJECT_PATH}' --build "platform=ios;debug=false"
-            """
-
-                    echo '✅ Cocos project build completed!'
+                    buildCocosProject([
+                        version: params.COCOS_VERSION,
+                        projectPath: params.COCOS_PROJECT_PATH
+                    ])
                 }
             }
         }
