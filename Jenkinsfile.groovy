@@ -5,7 +5,7 @@ pipeline {
     parameters {
         string(name: 'UNITY_PROJECT_PATH', defaultValue: '/Users/meher/Documents/GitHub/Games-Meher/Fact Or Lie', description: 'Local path to Unity project')
         string(name: 'PLUGINS_PROJECT_PATH', defaultValue: '/Users/meher/Documents/GitHub/UpStoreTools', description: 'Local path to Plugins repo')
-        string(name: 'COCOS_PROJECT_PATH', defaultValue: '/Users/meher/Documents/GitHub/SDKForJenkins/JenkensCocos2unity', description: 'Cocos project path')
+        string(name: 'COCOS_PROJECT_PATH', defaultValue: '/Users/meher/Documents/GitHub/CocosProjectsSDK/JenkinsSDK373', description: 'Cocos project path')
         text(name: 'UNITY_OVERRIDE_VALUE' , description: 'Override value for Unity')
         string(name: 'COCOS_OVERRIDE_VALUE' , description: 'Override value for Cocos')
         choice(name: 'COCOS_VERSION', choices: ['cocos2', 'cocos3'], description: 'Cocos version')
@@ -53,86 +53,21 @@ pipeline {
             }
         }
 
-        stage('Clean Previous Build Folders') {
+        stage('Clean & Update Dates') {
             when {
                 allOf {
                     expression { params.GAME_ENGINE == 'unity' }
-                    expression { params.COCOS_VERSION == 'cocos2' }
                     expression { params.ENVIRONMENT == 'Production' }
+                    expression { params.COCOS_VERSION == 'cocos2' || params.COCOS_VERSION == 'cocos3' }
                 }
             }
             steps {
                 script {
-                    echo '🧹 Cleaning previous build folders under jenkinsBuild/${productName}...'
-
-                    def productName = sh(
-                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
-                returnStdout: true
-            ).trim()
-
-                    def buildPath = "${env.HOME}/jenkinsBuild/${productName}"
-                    def folders = ['CocosBuild', 'UnityBuild', 'XcodeWorkspace']
-
-                    folders.each { folder ->
-                        def fullPath = "${buildPath}/${folder}"
-                        if (fileExists(fullPath)) {
-                            echo "🗑 Deleting: ${fullPath}"
-                            sh "rm -rf '${fullPath}'"
-                } else {
-                            echo "✅ ${folder} does not exist, skipping."
-                        }
-                    }
-
-                    echo "✅ Cleanup finished for ${buildPath}"
-                }
-            }
-        }
-
-        stage('Update Script Dates (If Not Testing)') {
-            when {
-                allOf {
-                    expression { params.GAME_ENGINE == 'unity' }
-                    expression { params.COCOS_VERSION == 'cocos2' }
-                    expression { params.ENVIRONMENT == 'Production' }
-                }
-            }
-            steps {
-                script {
-                    echo '📆 Updating date inside CheckStatus and FE2In scripts...'
-
-                    def venvPath = sh(
-                script: "find $HOME/.venvs -name 'pbxproj-env' -type d | head -n 1",
-                returnStdout: true
-            ).trim()
-
-                    if (!venvPath) {
-                        error '❌ Virtual environment not found!'
-                    }
-
-                    echo "✅ Found VENV at: ${venvPath}"
-
-                    def productName = sh(
-                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
-                returnStdout: true
-            ).trim()
-
-                    def jsonFilePath = "${env.HOME}/jenkinsBuild/${productName}/filenameMap.json"
-                    def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
-                    def pythonScript = "${jenkinsfiles}/Python/UpdateScriptDate.py"
-
-                    def jsonContent = readJSON file: jsonFilePath
-                    def checkStatusPath = "${params.COCOS_PROJECT_PATH}/assets/LoadScene/${jsonContent.CheckstatutName}"
-                    def feInPath = jsonContent['FEln Name']
-
-                    echo "📄 Parsed JSON: CheckStatus = ${checkStatusPath}, FE2In = ${feInPath}"
-
-                    sh """
-                source '${venvPath}/bin/activate' && \
-                python3 '${pythonScript}' '${checkStatusPath}' && \
-                python3 '${pythonScript}' '${feInPath}'
-            """
-
-                    echo "✅ Date updated in ${checkStatusPath} and ${feInPath}"
+                    cleanAndUpdateDates([
+                unityProjectPath: params.UNITY_PROJECT_PATH,
+                cocosProjectPath: params.COCOS_PROJECT_PATH,
+                workspace: env.WORKSPACE
+            ])
                 }
             }
         }
