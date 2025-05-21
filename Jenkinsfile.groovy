@@ -5,7 +5,7 @@ pipeline {
     parameters {
         string(name: 'UNITY_PROJECT_PATH', defaultValue: '/Users/meher/Documents/GitHub/Games-Meher/Fact Or Lie', description: 'Local path to Unity project')
         string(name: 'PLUGINS_PROJECT_PATH', defaultValue: '/Users/meher/Documents/GitHub/UpStoreTools', description: 'Local path to Plugins repo')
-        string(name: 'COCOS_PROJECT_PATH', defaultValue: '/Users/meher/Documents/GitHub/CocosProjectsSDK/JenkinsSDK373', description: 'Cocos project path')
+        string(name: 'COCOS_PROJECT_PATH', defaultValue: '/Users/meher/Documents/GitHub/SDKForJenkins/JenkensCocos2unity', description: 'Cocos project path')
         text(name: 'UNITY_OVERRIDE_VALUE' , description: 'Override value for Unity')
         string(name: 'COCOS_OVERRIDE_VALUE' , description: 'Override value for Cocos')
         choice(name: 'COCOS_VERSION', choices: ['cocos2', 'cocos3'], description: 'Cocos version')
@@ -90,60 +90,22 @@ pipeline {
             }
         }
 
-        stage('Preprocess CheckStatus.ts (Before Copy)') {
+        stage('Preprocess CheckStatus.ts') {
             when {
                 expression {
-                    return params.COCOS_VERSION == 'cocos2' && params.ENVIRONMENT == 'Testing'
+                    return (params.COCOS_VERSION == 'cocos2' || params.COCOS_VERSION == 'cocos3') &&
+                   params.ENVIRONMENT == 'Testing'
                 }
             }
             steps {
                 script {
-                    echo '⚙️ Preprocessing CheckStatus.ts with override and date...'
-
-                    def venvPath = sh(
-                script: "find $HOME/.venvs -name 'pbxproj-env' -type d | head -n 1",
-                returnStdout: true
-            ).trim()
-
-                    def tsFilePath = "${params.PLUGINS_PROJECT_PATH}/BootUnity213/assets/LoadScene/CheckStatus.ts"
-                    def override = params.COCOS_OVERRIDE_VALUE
-                    def testingFlag = params.ENVIRONMENT == 'Testing' ? 'true' : 'false'
-                    def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
-
-                    // Run Python preprocessor
-                    sh """
-                source '${venvPath}/bin/activate' && \
-                python3 '${jenkinsfiles}/Python/PreprocessCheckStatus.py' '${tsFilePath}' '${override}' '${testingFlag}'
-            """
-
-                    // Run prepareUpStore
-                    def prepareOutput = sh(
-                script: "'${params.PLUGINS_PROJECT_PATH}/BootUnity213/prepareUpStore' 2>&1",
-                returnStdout: true
-            ).trim()
-
-                    echo '📋 prepareUpStore output:'
-                    prepareOutput.readLines().each { line -> echo "│ ${line}" }
-
-                    // Safely extract filename by scanning lines
-                    def newFileName = null
-                    prepareOutput.readLines().each { line ->
-                        def match = line =~ /__updating ts file from: .*CheckStatus\.ts to .*\/([A-Za-z0-9_]+\.ts)/
-                        if (match.find()) {
-                            newFileName = match.group(1)
-                            return
-                        }
-                    }
-
-                    if (!newFileName) {
-                        echo '❗ Could not match CheckStatus.ts rename. Full output:'
-                        prepareOutput.readLines().each { line -> echo "  >> ${line}" }
-                        error '❌ Failed to extract new filename for CheckStatus.ts!'
-                    }
-
-                    env.CHECKSTATUTNAME = newFileName
-
-                    echo "✅ New CheckStatus.ts filename: ${newFileName}"
+                    preprocessCheckStatusTS([
+                pluginsPath : params.PLUGINS_PROJECT_PATH,
+                cocosVersion: params.COCOS_VERSION,
+                override    : params.COCOS_OVERRIDE_VALUE,
+                isTesting   : 'true',
+                workspace   : env.WORKSPACE
+            ])
                 }
             }
         }
