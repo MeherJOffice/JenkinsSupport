@@ -1,0 +1,30 @@
+{
+  "platform": "ios",
+  "buildPath": "project://build",
+  "debug": false,
+  "outputName": "MyCoolGame",                    
+  "startScene": "",
+  "scenes": [],
+  "packages": {
+    "ios": {
+      "packageName": "com.test.test",  
+      "orientation": {
+        "portrait": true,
+        "upsideDown": true,
+        "landscapeRight": true,
+        "landscapeLeft": true
+      },
+      "osTarget": {
+        "iphoneos": true,
+        "simulator": false
+      },
+      "targetVersion": "12.0",
+      "developerTeam": ""                        
+    },
+    "native": {
+      "encrypted": false,
+      "compressZip": false,
+      "JobSystem": "tbb"
+    }
+  }
+}
