@@ -128,7 +128,100 @@ pipeline {
                 }
             }
         }
-    
+        stage('Update Cocos 3 Build Settings') {
+            when {
+                expression {
+                    return params.GAME_ENGINE == 'unity' &&
+                   params.COCOS_VERSION == 'cocos3' &&
+                   params.ENVIRONMENT == 'Testing'
+                }
+            }
+            steps {
+                script {
+                    echo '🔍 Extracting Unity build info and generating Cocos config...'
+
+                    // Get product name
+                    def productName = sh(
+                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
+                returnStdout: true
+            ).trim()
+
+                    // Get bundle ID (Unity 6+)
+                    def bundleId = sh(
+                script: """
+                    awk '/applicationIdentifier:/,/^[^ ]/' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | \
+                    grep 'iPhone:' | sed 's/^.*iPhone: *//' | head -n 1 | tr -d '\\n\\r'
+                """,
+                returnStdout: true
+            ).trim()
+
+                    if (!bundleId) {
+                        bundleId = sh(
+                    script: """
+                        grep 'bundleIdentifier:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | \
+                        sed 's/^[^:]*: *//' | head -n 1 | tr -d '\\n\\r'
+                    """,
+                    returnStdout: true
+                ).trim()
+                    }
+
+                    // Scan LoadScene folder for scene files
+                    def loadSceneDir = "${params.COCOS_PROJECT_PATH}/assets/LoadScene"
+                    def sceneFiles = sh(
+                script: "find '${loadSceneDir}' -name '*.scene' -exec basename {} \\;",
+                returnStdout: true
+            ).trim().split('\n')
+
+                    if (sceneFiles.size() == 0) {
+                        error "❌ No scenes found in ${loadSceneDir}"
+                    }
+
+                    def scenesList = []
+                    def startScene = ''
+                    for (scene in sceneFiles) {
+                        def uuidStub = scene.replace('.scene', '').toLowerCase()
+                        scenesList << [url: "db://assets/LoadScene/${scene}", uuid: uuidStub, inBundle: false]
+                        if (scene.toLowerCase().endsWith('s.scene')) {
+                            startScene = uuidStub
+                        }
+                    }
+
+                    if (!startScene) {
+                        error "❌ No start scene found (must end with 's.scene')"
+                    }
+
+                    // Build final config
+                    def finalConfig = [
+                platform    : 'ios',
+                buildPath   : 'project://build',
+                debug       : false,
+                outputName  : productName,
+                startScene  : startScene,
+                scenes      : scenesList,
+                packages    : [
+                    ios: [
+                        packageName     : bundleId,
+                        orientation     : [portrait: true, upsideDown: true, landscapeRight: true, landscapeLeft: true],
+                        osTarget        : [iphoneos: true, simulator: false],
+                        targetVersion   : '12.0',
+                        developerTeam   : ''
+                    ],
+                    native: [
+                        encrypted   : false,
+                        compressZip : false,
+                        JobSystem   : 'tbb'
+                    ]
+                ]
+            ]
+
+                    // Write to buildConfig_ios.json
+                    def configPath = "${params.COCOS_PROJECT_PATH}/buildConfig_ios.json"
+                    writeJSON file: configPath, json: finalConfig, pretty: 2
+                    echo "✅ buildConfig_ios.json generated at ${configPath}"
+                }
+            }
+        }
+
         stage('Build Cocos Project') {
             when {
                 expression {
