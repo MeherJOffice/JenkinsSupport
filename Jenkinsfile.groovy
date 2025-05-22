@@ -271,9 +271,9 @@ pipeline {
                     for (scene in sceneFiles) {
                         def sceneMeta = "${loadSceneDir}/${scene}.meta"
                         def uuid = sh(
-                    script: "grep 'uuid:' '${sceneMeta}' | sed 's/.*uuid: *//'",
-                    returnStdout: true
-                ).trim()
+    script: "awk '/uuid:/ { gsub(/^.*uuid:[ ]*/, \"\"); print; exit }' '${sceneMeta}'",
+    returnStdout: true
+).trim()
 
                         if (!uuid) {
                             error "❌ UUID not found in ${sceneMeta}"
