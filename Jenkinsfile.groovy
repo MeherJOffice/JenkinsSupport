@@ -128,103 +128,6 @@ pipeline {
                 }
             }
         }
-        stage('Update Cocos 3 Build Settings') {
-            when {
-                expression {
-                    return params.GAME_ENGINE == 'unity' &&
-                   params.COCOS_VERSION == 'cocos3' &&
-                   params.ENVIRONMENT == 'Testing'
-                }
-            }
-            steps {
-                script {
-                    echo '🔍 Extracting Unity info and preparing Cocos build config...'
-
-                    def productName = sh(
-                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
-                returnStdout: true
-            ).trim()
-                def sanitizedName = productName.replaceAll(/[^a-zA-Z0-9]/, '')
-
-                    def bundleId = sh(
-                script: """
-                    awk '/applicationIdentifier:/,/^[^ ]/' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | \
-                    grep 'iPhone:' | sed 's/^.*iPhone: *//' | head -n 1 | tr -d '\\n\\r'
-                """,
-                returnStdout: true
-            ).trim()
-
-                    if (!bundleId) {
-                        bundleId = sh(
-                    script: """
-                        grep 'bundleIdentifier:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | \
-                        sed 's/^[^:]*: *//' | head -n 1 | tr -d '\\n\\r'
-                    """,
-                    returnStdout: true
-                ).trim()
-                    }
-
-                    def loadSceneDir = "${params.COCOS_PROJECT_PATH}/assets/LoadScene"
-                    def sceneFiles = sh(
-                script: "find '${loadSceneDir}' -name '*.scene' -exec basename {} \\;",
-                returnStdout: true
-            ).trim().split('\n')
-
-                    if (sceneFiles.size() == 0) {
-                        error "❌ No scenes found in ${loadSceneDir}"
-                    }
-
-                    def scenesList = []
-                    def startSceneUuid = ''
-
-                    for (scene in sceneFiles) {
-                        def sceneMeta = "${loadSceneDir}/${scene}.meta"
-                        def uuid = sh(
-                    script: "grep '^uuid:' '${sceneMeta}' | sed 's/uuid: //'",
-                    returnStdout: true
-                ).trim()
-
-                        scenesList << [url: "db://assets/LoadScene/${scene}", uuid: uuid, inBundle: false]
-
-                        if (scene.toLowerCase().endsWith('s.scene')) {
-                            startSceneUuid = uuid
-                        }
-                    }
-
-                    if (!startSceneUuid) {
-                        error "❌ No start scene found (must end with 's.scene')"
-                    }
-
-                    def finalConfig = [
-                platform    : 'ios',
-                buildPath   : 'project://build',
-                debug       : false,
-                name       : sanitizedName,
-                outputName  : 'ios',
-                startScene  : startSceneUuid,
-                scenes      : scenesList,
-                packages    : [
-                    ios: [
-                        packageName     : bundleId,
-                        orientation     : [portrait: true, upsideDown: true, landscapeRight: true, landscapeLeft: true],
-                        osTarget        : [iphoneos: true, simulator: false],
-                        targetVersion   : '12.0',
-                        developerTeam   : ''
-                    ],
-                    native: [
-                        encrypted   : false,
-                        compressZip : false,
-                        JobSystem   : 'tbb'
-                    ]
-                ]
-            ]
-
-                    def configPath = "${params.COCOS_PROJECT_PATH}/buildConfig_ios.json"
-                    writeJSON file: configPath, json: finalConfig, pretty: 2
-                    echo "✅ buildConfig_ios.json generated at ${configPath}"
-                }
-            }
-        }
 
         stage('Build Cocos Project') {
             when {
@@ -317,7 +220,103 @@ pipeline {
                 }
             }
         }
+        stage('Update Cocos 3 Build Settings') {
+            when {
+                expression {
+                    return params.GAME_ENGINE == 'unity' &&
+                   params.COCOS_VERSION == 'cocos3' &&
+                   params.ENVIRONMENT == 'Testing'
+                }
+            }
+            steps {
+                script {
+                    echo '🔍 Extracting Unity info and preparing Cocos build config...'
 
+                    def productName = sh(
+                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
+                returnStdout: true
+            ).trim()
+                    def sanitizedName = productName.replaceAll(/[^a-zA-Z0-9]/, '')
+
+                    def bundleId = sh(
+                script: """
+                    awk '/applicationIdentifier:/,/^[^ ]/' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | \
+                    grep 'iPhone:' | sed 's/^.*iPhone: *//' | head -n 1 | tr -d '\\n\\r'
+                """,
+                returnStdout: true
+            ).trim()
+
+                    if (!bundleId) {
+                        bundleId = sh(
+                    script: """
+                        grep 'bundleIdentifier:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | \
+                        sed 's/^[^:]*: *//' | head -n 1 | tr -d '\\n\\r'
+                    """,
+                    returnStdout: true
+                ).trim()
+                    }
+
+                    def loadSceneDir = "${params.COCOS_PROJECT_PATH}/assets/LoadScene"
+                    def sceneFiles = sh(
+                script: "find '${loadSceneDir}' -name '*.scene' -exec basename {} \\;",
+                returnStdout: true
+            ).trim().split('\n')
+
+                    if (sceneFiles.size() == 0) {
+                        error "❌ No scenes found in ${loadSceneDir}"
+                    }
+
+                    def scenesList = []
+                    def startSceneUuid = ''
+
+                    for (scene in sceneFiles) {
+                        def sceneMeta = "${loadSceneDir}/${scene}.meta"
+                        def uuid = sh(
+                    script: "grep '^uuid:' '${sceneMeta}' | sed 's/uuid: //'",
+                    returnStdout: true
+                ).trim()
+
+                        scenesList << [url: "db://assets/LoadScene/${scene}", uuid: uuid, inBundle: false]
+
+                        if (scene.toLowerCase().endsWith('s.scene')) {
+                            startSceneUuid = uuid
+                        }
+                    }
+
+                    if (!startSceneUuid) {
+                        error "❌ No start scene found (must end with 's.scene')"
+                    }
+
+                    def finalConfig = [
+                platform    : 'ios',
+                buildPath   : 'project://build',
+                debug       : false,
+                name       : sanitizedName,
+                outputName  : 'ios',
+                startScene  : startSceneUuid,
+                scenes      : scenesList,
+                packages    : [
+                    ios: [
+                        packageName     : bundleId,
+                        orientation     : [portrait: true, upsideDown: true, landscapeRight: true, landscapeLeft: true],
+                        osTarget        : [iphoneos: true, simulator: false],
+                        targetVersion   : '12.0',
+                        developerTeam   : ''
+                    ],
+                    native: [
+                        encrypted   : false,
+                        compressZip : false,
+                        JobSystem   : 'tbb'
+                    ]
+                ]
+            ]
+
+                    def configPath = "${params.COCOS_PROJECT_PATH}/buildConfig_ios.json"
+                    writeJSON file: configPath, json: finalConfig, pretty: 2
+                    echo "✅ buildConfig_ios.json generated at ${configPath}"
+                }
+            }
+        }
         stage('Copy Plugin Files to Unity Project') {
             when {
                 expression {
@@ -422,9 +421,7 @@ pipeline {
         stage('Add SharpZipLib Package via Package Manager') {
             when {
                 expression {
-                    return params.GAME_ENGINE == 'unity' &&
-                   params.COCOS_VERSION == 'cocos2' &&
-                   params.ENVIRONMENT == 'Testing'
+                    return params.GAME_ENGINE == 'unity' && params.ENVIRONMENT == 'Testing'
                 }
             }
             steps {
@@ -457,9 +454,7 @@ pipeline {
         stage('Setup Unity Project') {
             when {
                 expression {
-                    return params.GAME_ENGINE == 'unity' &&
-                   params.COCOS_VERSION == 'cocos2' &&
-                   params.ENVIRONMENT == 'Testing'
+                    return params.GAME_ENGINE == 'unity' && params.ENVIRONMENT == 'Testing'
                 }
             }
             steps {
@@ -492,8 +487,7 @@ pipeline {
         stage('Trigger Unity Compilation (Auto Detect Unity Version)') {
             when {
                 expression {
-                    return params.GAME_ENGINE == 'unity' &&
-                   params.ENVIRONMENT == 'Testing'
+                    return params.GAME_ENGINE == 'unity' && params.ENVIRONMENT == 'Testing'
                 }
             }
             steps {
@@ -527,43 +521,22 @@ pipeline {
             parallel {
                 stage('Build Cocos Project') {
                     when {
-                        expression { params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2' }
+                        expression {
+                            return params.GAME_ENGINE == 'unity' &&
+                           (params.COCOS_VERSION == 'cocos2' || params.COCOS_VERSION == 'cocos3') &&
+                           params.ENVIRONMENT == 'Testing'
+                        }
                     }
                     steps {
                         script {
-                            echo '🚀 Preparing Cocos project build...'
-
-                            // Define Cocos Creator executable path
-                            def cocosCreatorPath = env.COCOS_CREATOR_213_PATH
-
-                            if (!cocosCreatorPath?.trim()) {
-                                error '❌ Environment variable COCOS_CREATOR_213_PATH is not set!'
-                            }
-
-                            // Clean old build folder if it exists
-                            def oldBuildPath = "${params.COCOS_PROJECT_PATH}/build"
-                            echo "🧹 Checking and cleaning old build at: ${oldBuildPath}"
-
-                            sh """
-                if [ -d '${oldBuildPath}' ]; then
-                    echo "🗑️ Old build found. Deleting..."
-                    rm -rf '${oldBuildPath}'
-                else
-                    echo "✅ No old build to clean."
-                fi
-            """
-
-                            // Start building
-                            echo '🚀 Starting fresh Cocos project build...'
-                            sh """
-                '${cocosCreatorPath}' --path '${params.COCOS_PROJECT_PATH}' --build "platform=ios;debug=false"
-            """
-
-                            echo '✅ Cocos project build completed!'
+                            buildCocosProject([
+                        version: params.COCOS_VERSION,
+                        projectPath: params.COCOS_PROJECT_PATH
+                    ])
                         }
                     }
                 }
-
+    
                 stage('Build Unity Project') {
                     when {
                         expression { params.GAME_ENGINE == 'unity' }
