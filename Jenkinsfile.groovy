@@ -357,41 +357,6 @@ pipeline {
                 }
             }
         }
-stage('Replace Cocos 3 iOS Icons with Unity Icons') {
-    when {
-        expression {
-            return params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos3'
-        }
-    }
-    steps {
-        script {
-            echo '🔎 Reading product name from Unity settings...'
-
-            def productName = sh(
-                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
-                returnStdout: true
-            ).trim()
-
-            def sanitizedProductName = productName.replaceAll(/[^A-Za-z0-9]/, '')
-
-            def unityIconsPath = "${env.HOME}/jenkinsBuild/${productName}/UnityBuild/Unity-iPhone/Images.xcassets/AppIcon.appiconset"
-            def cocosIconsPath = "${params.COCOS_PROJECT_PATH}/native/engine/ios/Images.xcassets/AppIcon.appiconset"
-
-            if (!fileExists(unityIconsPath)) {
-                error "❌ Unity AppIcon path not found: ${unityIconsPath}"
-            }
-
-            echo "🔁 Replacing Cocos 3 icons using Unity's icon set..."
-            sh """
-                rm -rf "${cocosIconsPath}"
-                mkdir -p "$(dirname "${cocosIconsPath}")"
-                cp -R "${unityIconsPath}" "${cocosIconsPath}"
-            """
-
-            echo '✅ Cocos 3 iOS app icons successfully replaced!'
-        }
-    }
-}
 
         stage('Copy Plugin Files to Unity Project') {
             when {
@@ -905,7 +870,41 @@ stage('Replace Cocos 3 iOS Icons with Unity Icons') {
                 }
             }
         }
+        stage('Replace Cocos 3 iOS Icons with Unity Icons') {
+            when {
+                expression {
+                    return params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos3'
+                }
+            }
+            steps {
+                script {
+                    echo '🔎 Reading product name from Unity settings...'
 
+                    def productName = sh(
+                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
+                returnStdout: true
+            ).trim()
+
+                    def sanitizedProductName = productName.replaceAll(/[^A-Za-z0-9]/, '')
+
+                    def unityIconsPath = "${env.HOME}/jenkinsBuild/${productName}/UnityBuild/Unity-iPhone/Images.xcassets/AppIcon.appiconset"
+                    def cocosIconsPath = "${params.COCOS_PROJECT_PATH}/native/engine/ios/Images.xcassets/AppIcon.appiconset"
+
+                    if (!fileExists(unityIconsPath)) {
+                        error "❌ Unity AppIcon path not found: ${unityIconsPath}"
+                    }
+
+                    echo "🔁 Replacing Cocos 3 icons using Unity's icon set..."
+                    sh """
+                rm -rf '${cocosIconsPath}'
+                mkdir -p \$(dirname '${cocosIconsPath}')
+                cp -R '${unityIconsPath}' '${cocosIconsPath}'
+            """
+
+                    echo '✅ Cocos 3 iOS app icons successfully replaced!'
+                }
+            }
+        }
         stage('Copy functionsMap.json to Cocos Build') {
             when {
                 expression {
