@@ -2,7 +2,8 @@
   "platform": "ios",
   "buildPath": "project://build",
   "debug": false,
-  "outputName": "MyCoolGame",                    
+  "name": "Test",
+  "outputName": "ios",                    
   "startScene": "",
   "scenes": [],
   "packages": {

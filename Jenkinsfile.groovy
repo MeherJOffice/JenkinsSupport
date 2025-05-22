@@ -138,15 +138,14 @@ pipeline {
             }
             steps {
                 script {
-                    echo '🔍 Extracting Unity build info and generating Cocos config...'
+                    echo '🔍 Extracting Unity info and preparing Cocos build config...'
 
-                    // Get product name
                     def productName = sh(
                 script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
                 returnStdout: true
             ).trim()
+                def sanitizedName = productName.replaceAll(/[^a-zA-Z0-9]/, '')
 
-                    // Get bundle ID (Unity 6+)
                     def bundleId = sh(
                 script: """
                     awk '/applicationIdentifier:/,/^[^ ]/' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | \
@@ -165,7 +164,6 @@ pipeline {
                 ).trim()
                     }
 
-                    // Scan LoadScene folder for scene files
                     def loadSceneDir = "${params.COCOS_PROJECT_PATH}/assets/LoadScene"
                     def sceneFiles = sh(
                 script: "find '${loadSceneDir}' -name '*.scene' -exec basename {} \\;",
@@ -177,26 +175,33 @@ pipeline {
                     }
 
                     def scenesList = []
-                    def startScene = ''
+                    def startSceneUuid = ''
+
                     for (scene in sceneFiles) {
-                        def uuidStub = scene.replace('.scene', '').toLowerCase()
-                        scenesList << [url: "db://assets/LoadScene/${scene}", uuid: uuidStub, inBundle: false]
+                        def sceneMeta = "${loadSceneDir}/${scene}.meta"
+                        def uuid = sh(
+                    script: "grep '^uuid:' '${sceneMeta}' | sed 's/uuid: //'",
+                    returnStdout: true
+                ).trim()
+
+                        scenesList << [url: "db://assets/LoadScene/${scene}", uuid: uuid, inBundle: false]
+
                         if (scene.toLowerCase().endsWith('s.scene')) {
-                            startScene = uuidStub
+                            startSceneUuid = uuid
                         }
                     }
 
-                    if (!startScene) {
+                    if (!startSceneUuid) {
                         error "❌ No start scene found (must end with 's.scene')"
                     }
 
-                    // Build final config
                     def finalConfig = [
                 platform    : 'ios',
                 buildPath   : 'project://build',
                 debug       : false,
-                outputName  : productName,
-                startScene  : startScene,
+                name       : sanitizedName,
+                outputName  : 'ios',
+                startScene  : startSceneUuid,
                 scenes      : scenesList,
                 packages    : [
                     ios: [
@@ -214,7 +219,6 @@ pipeline {
                 ]
             ]
 
-                    // Write to buildConfig_ios.json
                     def configPath = "${params.COCOS_PROJECT_PATH}/buildConfig_ios.json"
                     writeJSON file: configPath, json: finalConfig, pretty: 2
                     echo "✅ buildConfig_ios.json generated at ${configPath}"
