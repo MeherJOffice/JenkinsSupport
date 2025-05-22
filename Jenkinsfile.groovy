@@ -235,15 +235,14 @@ pipeline {
                     echo "🔄 From: ${sourceDir}"
                     echo "➡️ To:   ${targetDir}"
 
-                    // Ensure target directory exists
+                    // Ensure target exists
                     sh "mkdir -p '${targetDir}'"
 
-                    // Run rsync with itemized logging
+                    // Copy and overwrite recursively
                     sh """
-                echo "📄 Files replaced:"
-                rsync -av --itemize-changes '${sourceDir}/' '${targetDir}/'
+                rsync -av --delete '${sourceDir}/' '${targetDir}/'
             """
-    
+
                     echo '✅ Native engine files patched successfully.'
                 }
             }
@@ -358,6 +357,41 @@ pipeline {
                 }
             }
         }
+stage('Replace Cocos 3 iOS Icons with Unity Icons') {
+    when {
+        expression {
+            return params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos3'
+        }
+    }
+    steps {
+        script {
+            echo '🔎 Reading product name from Unity settings...'
+
+            def productName = sh(
+                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
+                returnStdout: true
+            ).trim()
+
+            def sanitizedProductName = productName.replaceAll(/[^A-Za-z0-9]/, '')
+
+            def unityIconsPath = "${env.HOME}/jenkinsBuild/${productName}/UnityBuild/Unity-iPhone/Images.xcassets/AppIcon.appiconset"
+            def cocosIconsPath = "${params.COCOS_PROJECT_PATH}/native/engine/ios/Images.xcassets/AppIcon.appiconset"
+
+            if (!fileExists(unityIconsPath)) {
+                error "❌ Unity AppIcon path not found: ${unityIconsPath}"
+            }
+
+            echo "🔁 Replacing Cocos 3 icons using Unity's icon set..."
+            sh """
+                rm -rf "${cocosIconsPath}"
+                mkdir -p "$(dirname "${cocosIconsPath}")"
+                cp -R "${unityIconsPath}" "${cocosIconsPath}"
+            """
+
+            echo '✅ Cocos 3 iOS app icons successfully replaced!'
+        }
+    }
+}
 
         stage('Copy Plugin Files to Unity Project') {
             when {
@@ -430,8 +464,8 @@ pipeline {
             when {
                 expression {
                     return params.GAME_ENGINE == 'unity' &&
-                   params.COCOS_VERSION == 'cocos2' &&
-                   params.ENVIRONMENT == 'Testing'
+                           (params.COCOS_VERSION == 'cocos2' || params.COCOS_VERSION == 'cocos3') &&
+                           params.ENVIRONMENT == 'Testing'
                 }
             }
             steps {
@@ -692,6 +726,40 @@ pipeline {
                 }
             }
         }
+        stage('Copy Cocos 373 Build to Jenkins Build Folder') {
+            when {
+                expression { params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos3' }
+            }
+            steps {
+                script {
+                    def productName = sh(
+                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
+                returnStdout: true
+            ).trim()
+
+                    def cocosBuildFolder = "${params.COCOS_PROJECT_PATH}/build"
+                    def targetBuildFolder = "$HOME/jenkinsBuild/${productName}/CocosBuild"
+
+                    echo "📂 Copying Cocos build from ${cocosBuildFolder} to ${targetBuildFolder}"
+
+                    // Clean target and copy build
+                    sh """
+                rm -rf '${targetBuildFolder}'
+                mkdir -p '${targetBuildFolder}'
+                cp -R '${cocosBuildFolder}/.' '${targetBuildFolder}/'
+            """
+
+                    echo '✅ Cocos build copied successfully.'
+
+                    // Optional: delete the original Cocos build
+                    sh """
+                rm -rf '${cocosBuildFolder}'
+            """
+
+                    echo '🧹 Original Cocos build folder deleted to save space.'
+                }
+            }
+        }
 
         stage('Check Go Version') {
             steps {
@@ -738,7 +806,10 @@ pipeline {
 
         stage('Setup Xcode Workspace (Unity + Cocos)') {
             when {
-                expression { params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2' }
+                expression {
+                    return params.GAME_ENGINE == 'unity' &&
+                   (params.COCOS_VERSION == 'cocos2' || params.COCOS_VERSION == 'cocos3')
+                }
             }
             steps {
                 script {
@@ -753,8 +824,8 @@ pipeline {
                         error "❌ Virtual environment 'pbxproj-env' not found!"
                     }
                     echo "✅ Found VENV at: ${venvPath}"
-                    def pythonfiles = "${env.WORKSPACE}/JenkinsFiles/Python"
 
+                    def pythonfiles = "${env.WORKSPACE}/JenkinsFiles/Python"
                     def sourcePyScript = "${pythonfiles}/SetupXcodeWorkspace.py"
                     def targetFolder = "${params.UNITY_PROJECT_PATH}/unityBuild"
                     def copiedScript = "${targetFolder}/SetupXcodeWorkspace.py"
@@ -772,8 +843,13 @@ pipeline {
             ).trim()
 
                     def sanitizedName = productName.replaceAll(/[^a-zA-Z0-9]/, '')
-                    def unityXcodeProj = "/Users/meher/jenkinsBuild/${productName}/UnityBuild/Unity-iPhone.xcodeproj"
-                    def cocosXcodeProj = "/Users/meher/jenkinsBuild/${productName}/CocosBuild/jsb-default/frameworks/runtime-src/proj.ios_mac/${sanitizedName}.xcodeproj"
+                    def targetBuildFolder = "$HOME/jenkinsBuild/${productName}"
+
+                    def unityXcodeProj = "${targetBuildFolder}/UnityBuild/Unity-iPhone.xcodeproj"
+
+                    def cocosXcodeProj = params.COCOS_VERSION == 'cocos2'
+                ? "${targetBuildFolder}/CocosBuild/jsb-default/frameworks/runtime-src/proj.ios_mac/${sanitizedName}.xcodeproj"
+                : "${targetBuildFolder}/CocosBuild/ios/proj/${sanitizedName}.xcodeproj"
 
                     if (!fileExists(unityXcodeProj)) {
                         error "❌ Unity Xcode project not found at: ${unityXcodeProj}"
@@ -788,7 +864,7 @@ pipeline {
                 python3 '${copiedScript}' '${unityXcodeProj}' '${cocosXcodeProj}'
             """
 
-                    // 🔥 Delete copied Python script
+                    // 🔥 Cleanup
                     sh "rm -f '${copiedScript}'"
                     echo '🧹 Cleanup: Deleted SetupXcodeWorkspace.py'
 
