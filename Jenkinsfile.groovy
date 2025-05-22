@@ -220,6 +220,35 @@ pipeline {
                 }
             }
         }
+        stage('Patch Cocos Native Engine') {
+            when {
+                expression {
+                    return params.COCOS_VERSION == 'cocos3'
+                }
+            }
+            steps {
+                script {
+                    def sourceDir = "${env.WORKSPACE}/BootUnity373/nativePatch/engine/ios"
+                    def targetDir = "${params.COCOS_PROJECT_PATH}/native/engine"
+
+                    echo '🛠️ Replacing native engine files...'
+                    echo "🔄 From: ${sourceDir}"
+                    echo "➡️ To:   ${targetDir}"
+
+                    // Ensure target directory exists
+                    sh "mkdir -p '${targetDir}'"
+
+                    // Run rsync with itemized logging
+                    sh """
+                echo "📄 Files replaced:"
+                rsync -av --itemize-changes '${sourceDir}/' '${targetDir}/'
+            """
+    
+                    echo '✅ Native engine files patched successfully.'
+                }
+            }
+        }
+
         stage('Update Cocos 3 Build Settings') {
             when {
                 expression {
