@@ -272,19 +272,23 @@ pipeline {
                     for (scene in sceneFiles) {
                         def sceneMeta = "${loadSceneDir}/${scene}.meta"
                         def uuid = sh(
-                    script: "grep '^uuid:' '${sceneMeta}' | sed 's/uuid: //'",
-                    returnStdout: true
-                ).trim()
+        script: "grep '^uuid:' '${sceneMeta}' | sed 's/uuid: //'",
+        returnStdout: true
+    ).trim()
+
+                        echo "📄 Found scene: ${scene} → UUID: ${uuid}"
 
                         scenesList << [url: "db://assets/LoadScene/${scene}", uuid: uuid, inBundle: false]
 
                         if (scene.toLowerCase().endsWith('s.scene')) {
                             startSceneUuid = uuid
+                            echo "✅ Marked as startScene: ${scene}"
                         }
                     }
 
-                    if (!startSceneUuid) {
-                        error "❌ No start scene found (must end with 's.scene')"
+                    if (!startSceneUuid && scenesList.size() > 0) {
+                        startSceneUuid = scenesList[0].uuid
+                        echo "⚠️ No scene ending in 's.scene' found, fallback to: ${scenesList[0].url}"
                     }
 
                     def finalConfig = [
@@ -536,7 +540,7 @@ pipeline {
                         }
                     }
                 }
-    
+
                 stage('Build Unity Project') {
                     when {
                         expression { params.GAME_ENGINE == 'unity' }
