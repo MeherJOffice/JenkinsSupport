@@ -236,7 +236,6 @@ pipeline {
                 script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
                 returnStdout: true
             ).trim()
-                    def sanitizedName = productName.replaceAll(/[^a-zA-Z0-9]/, '')
 
                     def bundleId = sh(
                 script: """
@@ -272,9 +271,13 @@ pipeline {
                     for (scene in sceneFiles) {
                         def sceneMeta = "${loadSceneDir}/${scene}.meta"
                         def uuid = sh(
-        script: "grep '^uuid:' '${sceneMeta}' | sed 's/uuid: //'",
-        returnStdout: true
-    ).trim()
+                    script: "grep 'uuid:' '${sceneMeta}' | sed 's/.*uuid: *//'",
+                    returnStdout: true
+                ).trim()
+
+                        if (!uuid) {
+                            error "❌ UUID not found in ${sceneMeta}"
+                        }
 
                         echo "📄 Found scene: ${scene} → UUID: ${uuid}"
 
@@ -295,7 +298,7 @@ pipeline {
                 platform    : 'ios',
                 buildPath   : 'project://build',
                 debug       : false,
-                name       : sanitizedName,
+                name        : productName
                 outputName  : 'ios',
                 startScene  : startSceneUuid,
                 scenes      : scenesList,
@@ -321,6 +324,7 @@ pipeline {
                 }
             }
         }
+
         stage('Copy Plugin Files to Unity Project') {
             when {
                 expression {
