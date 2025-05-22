@@ -298,7 +298,7 @@ pipeline {
                 platform    : 'ios',
                 buildPath   : 'project://build',
                 debug       : false,
-                name        : productName
+                name        : productName,
                 outputName  : 'ios',
                 startScene  : startSceneUuid,
                 scenes      : scenesList,
