@@ -332,7 +332,7 @@ pipeline {
                 buildPath   : 'project://build',
                 debug       : false,
                 name        : sanitizedProductName,
-                outputName  : 'ios-01',
+                outputName  : 'ios',
                 startScene  : startSceneUuid,
                 scenes      : scenesList,
                 packages    : [
