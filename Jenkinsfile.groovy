@@ -270,12 +270,16 @@ pipeline {
 
                     for (scene in sceneFiles) {
                         def sceneMeta = "${loadSceneDir}/${scene}.meta"
+
+                        // 🔧 Extract UUID from JSON-style meta
                         def uuid = sh(
-    script: "awk '/uuid:/ { gsub(/^.*uuid:[ ]*/, \"\"); print; exit }' '${sceneMeta}'",
-    returnStdout: true
-).trim()
+                    script: "grep '\"uuid\"' '${sceneMeta}' | sed 's/.*\"uuid\": *\"\\(.*\\)\".*/\\1/'",
+                    returnStdout: true
+                ).trim()
 
                         if (!uuid) {
+                            echo "❌ Could not extract UUID from: ${sceneMeta}"
+                            sh "cat '${sceneMeta}'"
                             error "❌ UUID not found in ${sceneMeta}"
                         }
 
@@ -299,7 +303,7 @@ pipeline {
                 buildPath   : 'project://build',
                 debug       : false,
                 name        : productName,
-                outputName  : 'ios',
+                outputName  : 'ios-01',
                 startScene  : startSceneUuid,
                 scenes      : scenesList,
                 packages    : [
