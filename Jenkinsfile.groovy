@@ -236,6 +236,7 @@ pipeline {
                 script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
                 returnStdout: true
             ).trim()
+                    def sanitizedProductName = productName.replaceAll(/[^A-Za-z0-9]/, '')
 
                     def bundleId = sh(
                 script: """
@@ -302,7 +303,7 @@ pipeline {
                 platform    : 'ios',
                 buildPath   : 'project://build',
                 debug       : false,
-                name        : productName,
+                name        : sanitizedProductName,
                 outputName  : 'ios-01',
                 startScene  : startSceneUuid,
                 scenes      : scenesList,
