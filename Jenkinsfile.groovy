@@ -231,16 +231,16 @@ pipeline {
                     def sourceDir = "${params.PLUGINS_PROJECT_PATH}/BootUnity373/nativePatch/engine/ios"
                     def targetDir = "${params.COCOS_PROJECT_PATH}/native/engine/ios"
 
-                    echo '🛠️ Replacing native engine files...'
+                    echo '🛠️ Patching native engine files (merge only, no delete)...'
                     echo "🔄 From: ${sourceDir}"
                     echo "➡️ To:   ${targetDir}"
 
                     // Ensure target exists
                     sh "mkdir -p '${targetDir}'"
 
-                    // Copy and overwrite recursively
+                    // Copy and overwrite only matching files
                     sh """
-                rsync -av --delete '${sourceDir}/' '${targetDir}/'
+                rsync -av '${sourceDir}/' '${targetDir}/'
             """
 
                     echo '✅ Native engine files patched successfully.'
@@ -326,10 +326,12 @@ pipeline {
                         startSceneUuid = scenesList[0].uuid
                         echo "⚠️ No scene ending in 's.scene' found, fallback to: ${scenesList[0].url}"
                     }
+                     def targetBuildFolder = "$HOME/jenkinsBuild/${productName}/CocosBuild"
+
 
                     def finalConfig = [
                 platform    : 'ios',
-                buildPath   : 'project://build',
+                buildPath   : targetBuildFolder,
                 debug       : false,
                 name        : sanitizedProductName,
                 outputName  : 'ios',
@@ -693,7 +695,7 @@ pipeline {
         }
         stage('Copy Cocos 373 Build to Jenkins Build Folder') {
             when {
-                expression { params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos3' }
+                expression { params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos4' }
             }
             steps {
                 script {
