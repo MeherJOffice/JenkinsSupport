@@ -229,7 +229,7 @@ pipeline {
             steps {
                 script {
                     def sourceDir = "${params.PLUGINS_PROJECT_PATH}/BootUnity373/nativePatch/engine/ios"
-                    def targetDir = "${params.COCOS_PROJECT_PATH}/native/engine"
+                    def targetDir = "${params.COCOS_PROJECT_PATH}/native/engine/ios"
 
                     echo '🛠️ Replacing native engine files...'
                     echo "🔄 From: ${sourceDir}"
