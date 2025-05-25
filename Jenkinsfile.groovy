@@ -128,7 +128,7 @@ pipeline {
                 }
             }
         }
-        stage('Stabilize Project State') {
+        stage('Stabilize Project State before build') {
             when {
                 expression {
                     return params.GAME_ENGINE == 'unity' &&
@@ -138,14 +138,10 @@ pipeline {
             }
             steps {
                 script {
-                    echo '🧹 Cleaning temp, library, and native folders...'
-                    sh """
-                rm -rf '${params.COCOS_PROJECT_PATH}/temp'
-                rm -rf '${params.COCOS_PROJECT_PATH}/library'
-                rm -rf '${params.COCOS_PROJECT_PATH}/native'
-            """
-                    echo '🕒 Waiting 2s to let file system settle...'
-                    sleep time: 2, unit: 'SECONDS'
+                    stabilizeCocosProject(
+                projectPath: params.COCOS_PROJECT_PATH,
+                cleanNative: true
+            )
                 }
             }
         }
@@ -178,98 +174,15 @@ pipeline {
             }
             steps {
                 script {
-                    echo '🔎 Searching for Python virtual environment...'
-
-                    def venvPath = sh(
-                script: "find $HOME/.venvs -name 'pbxproj-env' -type d | head -n 1",
-                returnStdout: true
-            ).trim()
-
-                    if (!venvPath) {
-                        error '❌ Virtual environment not found!'
-                    }
-
-                    echo "✅ Found VENV at: ${venvPath}"
-
-                    // Extract product name
-                    def productName = sh(
-                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
-                returnStdout: true
-            ).trim()
-
-                    // Try Unity 6+ format first
-                    def bundleId = sh(
-                script: """
-                    awk '/applicationIdentifier:/,/^[^ ]/' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | \
-                    grep 'iPhone:' | sed 's/^.*iPhone: *//' | head -n 1 | tr -d '\\n\\r'
-                """,
-                returnStdout: true
-            ).trim()
-
-                    // Fallback for older Unity versions
-                    if (!bundleId) {
-                        bundleId = sh(
-                    script: """
-                        grep 'bundleIdentifier:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | \
-                        sed 's/^[^:]*: *//' | head -n 1 | tr -d '\\n\\r'
-                    """,
-                    returnStdout: true
-                ).trim()
-                    }
-
-                    echo "📦 Product Name: ${productName}"
-                    echo "🔐 Bundle ID: ${bundleId}"
-                    def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
-
-                    def pythonFile = "${jenkinsfiles}/SetupCocosBuildSettings.py"
-                    def cocosProject = params.COCOS_PROJECT_PATH
-
-                    // Copy Python script into project
-                    sh "cp '${jenkinsfiles}/Python/SetupCocosBuildSettings.py' '${pythonFile}'"
-
-                    // Execute script
-                    sh """
-                source '${venvPath}/bin/activate' && \
-                python3 '${pythonFile}' '${cocosProject}' '${bundleId}' '${productName}'
-            """
-
-                    // 🔥 Cleanup after execution
-                    sh "rm -f '${pythonFile}'"
-                    echo '🧹 Cleanup: Deleted SetupCocosBuildSettings.py'
-
-                    echo '✅ Cocos build settings updated successfully.'
-                }
-            }
-        }
-        stage('Patch Cocos Native Engine') {
-            when {
-                expression {
-                    return params.COCOS_VERSION == 'cocos3'
-                }
-            }
-            steps {
-                script {
-                    def sourceDir = "${params.PLUGINS_PROJECT_PATH}/BootUnity373/nativePatch/engine/ios"
-                    def targetDir = "${params.COCOS_PROJECT_PATH}/native/engine/ios"
-
-                    echo '🛠️ Patching native engine files (merge only, no delete)...'
-                    echo "🔄 From: ${sourceDir}"
-                    echo "➡️ To:   ${targetDir}"
-
-                    // Ensure target exists
-                    sh "mkdir -p '${targetDir}'"
-
-                    // Copy and overwrite only matching files
-                    sh """
-                rsync -av '${sourceDir}/' '${targetDir}/'
-            """
-
-                    echo '✅ Native engine files patched successfully.'
+                    updateCocos2BuildSettings(
+                unityProjectPath: params.UNITY_PROJECT_PATH,
+                cocosProjectPath: params.COCOS_PROJECT_PATH
+            )
                 }
             }
         }
 
-        stage('Update Cocos 3 Build Settings') {
+        stage('Setup Cocos 3 Native & Build Config') {
             when {
                 expression {
                     return params.GAME_ENGINE == 'unity' &&
@@ -279,107 +192,16 @@ pipeline {
             }
             steps {
                 script {
-                    echo '🔍 Extracting Unity info and preparing Cocos build config...'
-
-                    def productName = sh(
-                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
-                returnStdout: true
-            ).trim()
-                    def sanitizedProductName = productName.replaceAll(/[^A-Za-z0-9]/, '')
-
-                    def bundleId = sh(
-                script: """
-                    awk '/applicationIdentifier:/,/^[^ ]/' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | \
-                    grep 'iPhone:' | sed 's/^.*iPhone: *//' | head -n 1 | tr -d '\\n\\r'
-                """,
-                returnStdout: true
-            ).trim()
-
-                    if (!bundleId) {
-                        bundleId = sh(
-                    script: """
-                        grep 'bundleIdentifier:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | \
-                        sed 's/^[^:]*: *//' | head -n 1 | tr -d '\\n\\r'
-                    """,
-                    returnStdout: true
-                ).trim()
-                    }
-
-                    def loadSceneDir = "${params.COCOS_PROJECT_PATH}/assets/LoadScene"
-                    def sceneFiles = sh(
-                script: "find '${loadSceneDir}' -name '*.scene' -exec basename {} \\;",
-                returnStdout: true
-            ).trim().split('\n')
-
-                    if (sceneFiles.size() == 0) {
-                        error "❌ No scenes found in ${loadSceneDir}"
-                    }
-
-                    def scenesList = []
-                    def startSceneUuid = ''
-
-                    for (scene in sceneFiles) {
-                        def sceneMeta = "${loadSceneDir}/${scene}.meta"
-
-                        // 🔧 Extract UUID from JSON-style meta
-                        def uuid = sh(
-                    script: "grep '\"uuid\"' '${sceneMeta}' | sed 's/.*\"uuid\": *\"\\(.*\\)\".*/\\1/'",
-                    returnStdout: true
-                ).trim()
-
-                        if (!uuid) {
-                            echo "❌ Could not extract UUID from: ${sceneMeta}"
-                            sh "cat '${sceneMeta}'"
-                            error "❌ UUID not found in ${sceneMeta}"
-                        }
-
-                        echo "📄 Found scene: ${scene} → UUID: ${uuid}"
-
-                        scenesList << [url: "db://assets/LoadScene/${scene}", uuid: uuid, inBundle: false]
-
-                        if (scene.toLowerCase().endsWith('s.scene')) {
-                            startSceneUuid = uuid
-                            echo "✅ Marked as startScene: ${scene}"
-                        }
-                    }
-
-                    if (!startSceneUuid && scenesList.size() > 0) {
-                        startSceneUuid = scenesList[0].uuid
-                        echo "⚠️ No scene ending in 's.scene' found, fallback to: ${scenesList[0].url}"
-                    }
-                    def targetBuildFolder = "$HOME/jenkinsBuild/${productName}/CocosBuild"
-
-                    def finalConfig = [
-                platform    : 'ios',
-                buildPath   : targetBuildFolder,
-                debug       : false,
-                name        : sanitizedProductName,
-                outputName  : 'ios',
-                startScene  : startSceneUuid,
-                scenes      : scenesList,
-                packages    : [
-                    ios: [
-                        packageName     : bundleId,
-                        orientation     : [portrait: true, upsideDown: true, landscapeRight: true, landscapeLeft: true],
-                        osTarget        : [iphoneos: true, simulator: false],
-                        targetVersion   : '12.0',
-                        developerTeam   : ''
-                    ],
-                    native: [
-                        encrypted   : false,
-                        compressZip : false,
-                        JobSystem   : 'tbb'
-                    ]
-                ]
-            ]
-
-                    def configPath = "${params.COCOS_PROJECT_PATH}/buildConfig_ios.json"
-                    writeJSON file: configPath, json: finalConfig, pretty: 2
-                    echo "✅ buildConfig_ios.json generated at ${configPath}"
+                    updateCocos3BuildSetup(
+                unityProjectPath: params.UNITY_PROJECT_PATH,
+                cocosProjectPath: params.COCOS_PROJECT_PATH,
+                pluginsProjectPath: params.PLUGINS_PROJECT_PATH
+            )
                 }
             }
         }
-        stage('Stabilize Project State after build') {
+
+        stage('Stabilize Project State') {
             when {
                 expression {
                     return params.GAME_ENGINE == 'unity' &&
@@ -389,10 +211,10 @@ pipeline {
             }
             steps {
                 script {
-                    echo '🧹 Cleaning temp and library folders...'
-                    sh "rm -rf '${params.COCOS_PROJECT_PATH}/temp' '${params.COCOS_PROJECT_PATH}/library'"
-                    echo '🕒 Waiting 2s to let file system settle...'
-                    sleep time: 2, unit: 'SECONDS'
+                    stabilizeCocosProject(
+                projectPath: params.COCOS_PROJECT_PATH,
+                cleanNative: false
+            )
                 }
             }
         }
