@@ -138,13 +138,18 @@ pipeline {
             }
             steps {
                 script {
-                    echo '🧹 Cleaning temp and library folders...'
-                    sh "rm -rf '${params.COCOS_PROJECT_PATH}/temp' '${params.COCOS_PROJECT_PATH}/library'"
+                    echo '🧹 Cleaning temp, library, and native folders...'
+                    sh """
+                rm -rf '${params.COCOS_PROJECT_PATH}/temp'
+                rm -rf '${params.COCOS_PROJECT_PATH}/library'
+                rm -rf '${params.COCOS_PROJECT_PATH}/native'
+            """
                     echo '🕒 Waiting 2s to let file system settle...'
                     sleep time: 2, unit: 'SECONDS'
                 }
             }
         }
+
         stage('Build Cocos Project') {
             when {
                 expression {
@@ -371,6 +376,23 @@ pipeline {
                     def configPath = "${params.COCOS_PROJECT_PATH}/buildConfig_ios.json"
                     writeJSON file: configPath, json: finalConfig, pretty: 2
                     echo "✅ buildConfig_ios.json generated at ${configPath}"
+                }
+            }
+        }
+        stage('Stabilize Project State after build') {
+            when {
+                expression {
+                    return params.GAME_ENGINE == 'unity' &&
+                   params.COCOS_VERSION == 'cocos3' &&
+                   params.ENVIRONMENT == 'Testing'
+                }
+            }
+            steps {
+                script {
+                    echo '🧹 Cleaning temp and library folders...'
+                    sh "rm -rf '${params.COCOS_PROJECT_PATH}/temp' '${params.COCOS_PROJECT_PATH}/library'"
+                    echo '🕒 Waiting 2s to let file system settle...'
+                    sleep time: 2, unit: 'SECONDS'
                 }
             }
         }
