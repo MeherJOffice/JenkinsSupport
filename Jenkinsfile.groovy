@@ -352,7 +352,7 @@ pipeline {
         }
         stage('Copy Cocos Project to Jenkins Build Folder') {
             when {
-                expression { params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos4' }
+                expression { params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos3' }
             }
             steps {
                 script {
