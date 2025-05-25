@@ -1,6 +1,7 @@
 {
   "platform": "ios",
   "buildPath": "project://build",
+  "nativeEnginePath": "project://native",
   "debug": false,
   "name": "Test",
   "outputName": "ios",                    
@@ -28,6 +29,5 @@
       "JobSystem": "tbb"
     }
   },
-  "ios": null,
-  nativeEnginePath: "${buildPath}/native"
+  "ios": null
 }
