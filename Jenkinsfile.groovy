@@ -128,7 +128,23 @@ pipeline {
                 }
             }
         }
-
+        stage('Stabilize Project State') {
+            when {
+                expression {
+                    return params.GAME_ENGINE == 'unity' &&
+                   params.COCOS_VERSION == 'cocos3' &&
+                   params.ENVIRONMENT == 'Testing'
+                }
+            }
+            steps {
+                script {
+                    echo '🧹 Cleaning temp and library folders...'
+                    sh "rm -rf '${params.COCOS_PROJECT_PATH}/temp' '${params.COCOS_PROJECT_PATH}/library'"
+                    echo '🕒 Waiting 2s to let file system settle...'
+                    sleep time: 2, unit: 'SECONDS'
+                }
+            }
+        }
         stage('Build Cocos Project') {
             when {
                 expression {
@@ -326,8 +342,7 @@ pipeline {
                         startSceneUuid = scenesList[0].uuid
                         echo "⚠️ No scene ending in 's.scene' found, fallback to: ${scenesList[0].url}"
                     }
-                     def targetBuildFolder = "$HOME/jenkinsBuild/${productName}/CocosBuild"
-
+                    def targetBuildFolder = "$HOME/jenkinsBuild/${productName}/CocosBuild"
 
                     def finalConfig = [
                 platform    : 'ios',
