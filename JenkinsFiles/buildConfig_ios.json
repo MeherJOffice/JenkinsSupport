@@ -28,5 +28,6 @@
       "JobSystem": "tbb"
     }
   },
-  "ios": null
+  "ios": null,
+  nativeEnginePath: "${buildPath}/native"
 }
