@@ -379,7 +379,7 @@ pipeline {
         stage('Replace Cocos iOS Icons with Unity Icons') {
             when {
                 expression {
-                    return params.GAME_ENGINE == 'unity6' &&
+                    return params.GAME_ENGINE == 'unity' &&
                    (params.COCOS_VERSION == 'cocos2' || params.COCOS_VERSION == 'cocos3')
                 }
             }
