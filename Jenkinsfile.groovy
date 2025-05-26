@@ -108,133 +108,138 @@ pipeline {
                 }
             }
         }
-
-        stage('Sync BootUnity Folder') {
-            when {
-                expression {
-                    return params.GAME_ENGINE == 'unity' &&
-                   (params.COCOS_VERSION == 'cocos2' || params.COCOS_VERSION == 'cocos3') &&
-                   params.ENVIRONMENT == 'Testing'
+        stage('Setup Parallel Tasks') {
+            parallel {
+                stage('Cocos Pipeline') {
+                    stages {
+                        stage('Sync BootUnity Folder') {
+                            when {
+                                expression {
+                                    return params.GAME_ENGINE == 'unity' &&
+                                    (params.COCOS_VERSION == 'cocos2' || params.COCOS_VERSION == 'cocos3') &&
+                                    params.ENVIRONMENT == 'Testing'
+                                }
+                            }
+                            steps {
+                                script {
+                                    syncBootUnity([
+                                    cocosVersion     : params.COCOS_VERSION,
+                                    pluginsPath      : params.PLUGINS_PROJECT_PATH,
+                                    cocosProjectPath : params.COCOS_PROJECT_PATH
+                                 ])
+                                }
+                            }
+                        }
+                        stage('Stabilize Project State before build') {
+                            when {
+                                expression {
+                                    return params.GAME_ENGINE == 'unity' &&
+                                    params.COCOS_VERSION == 'cocos3' &&
+                                    params.ENVIRONMENT == 'Testing'
+                                }
+                            }
+                            steps {
+                                script {
+                                    stabilizeCocosProject(
+                                        projectPath: params.COCOS_PROJECT_PATH,
+                                        cleanNative: true
+                                    )
+                                }
+                            }
+                        }
+                        stage('Build Cocos Project') {
+                            when {
+                                expression {
+                                    return params.GAME_ENGINE == 'unity' &&
+                                    (params.COCOS_VERSION == 'cocos2' || params.COCOS_VERSION == 'cocos3') &&
+                                    params.ENVIRONMENT == 'Testing'
+                                }
+                            }
+                            steps {
+                                script {
+                                    buildCocosProject([
+                                        version: params.COCOS_VERSION,
+                                        projectPath: params.COCOS_PROJECT_PATH
+                                    ])
+                                }
+                            }
+                        }
+                        stage('Setup Cocos 2 Build Config') {
+                            when {
+                                expression {
+                                    return params.GAME_ENGINE == 'unity' &&
+                                    params.COCOS_VERSION == 'cocos2' &&
+                                    params.ENVIRONMENT == 'Testing'
+                                }
+                            }
+                            steps {
+                                script {
+                                    updateCocos2BuildSettings(
+                                        unityProjectPath: params.UNITY_PROJECT_PATH,
+                                        cocosProjectPath: params.COCOS_PROJECT_PATH
+                                    )
+                                }
+                            }
+                        }
+                        stage('Setup Cocos 3 Native & Build Config') {
+                            when {
+                                expression {
+                                    return params.GAME_ENGINE == 'unity' &&
+                                    params.COCOS_VERSION == 'cocos3' &&
+                                    params.ENVIRONMENT == 'Testing'
+                                }
+                            }
+                            steps {
+                                script {
+                                    updateCocos3BuildSetup(
+                                        unityProjectPath: params.UNITY_PROJECT_PATH,
+                                        cocosProjectPath: params.COCOS_PROJECT_PATH,
+                                        pluginsProjectPath: params.PLUGINS_PROJECT_PATH
+                                    )
+                                }
+                            }
+                        }
+                        stage('Stabilize Project State') {
+                            when {
+                                expression {
+                                    return params.GAME_ENGINE == 'unity' &&
+                                    params.COCOS_VERSION == 'cocos3' &&
+                                    params.ENVIRONMENT == 'Testing'
+                                }
+                            }
+                            steps {
+                                script {
+                                    stabilizeCocosProject(
+                                        projectPath: params.COCOS_PROJECT_PATH,
+                                        cleanNative: false
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
-            }
-            steps {
-                script {
-                    syncBootUnity([
-                cocosVersion     : params.COCOS_VERSION,
-                pluginsPath      : params.PLUGINS_PROJECT_PATH,
-                cocosProjectPath : params.COCOS_PROJECT_PATH
-            ])
+                stage('Unity Pipeline') {
+                    stages {
+                        stage('Setup Unity with Plugins') {
+                            when {
+                                expression {
+                                    return params.GAME_ENGINE == 'unity' && params.ENVIRONMENT == 'Testing'
+                                }
+                            }
+                            steps {
+                                script {
+                                    setupUnity(
+                                        unityProjectPath: params.UNITY_PROJECT_PATH,
+                                        pluginsProjectPath: params.PLUGINS_PROJECT_PATH,
+                                        sceneIndexToPatch: params.SCENE_INDEX_TO_PATCH
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
-        stage('Stabilize Project State before build') {
-            when {
-                expression {
-                    return params.GAME_ENGINE == 'unity' &&
-                   params.COCOS_VERSION == 'cocos3' &&
-                   params.ENVIRONMENT == 'Testing'
-                }
-            }
-            steps {
-                script {
-                    stabilizeCocosProject(
-                projectPath: params.COCOS_PROJECT_PATH,
-                cleanNative: true
-            )
-                }
-            }
-        }
-
-        stage('Build Cocos Project') {
-            when {
-                expression {
-                    return params.GAME_ENGINE == 'unity' &&
-                           (params.COCOS_VERSION == 'cocos2' || params.COCOS_VERSION == 'cocos3') &&
-                           params.ENVIRONMENT == 'Testing'
-                }
-            }
-            steps {
-                script {
-                    buildCocosProject([
-                        version: params.COCOS_VERSION,
-                        projectPath: params.COCOS_PROJECT_PATH
-                    ])
-                }
-            }
-        }
-
-        stage('Setup Cocos 2 Build Config') {
-            when {
-                expression {
-                    return params.GAME_ENGINE == 'unity' &&
-                   params.COCOS_VERSION == 'cocos2' &&
-                   params.ENVIRONMENT == 'Testing'
-                }
-            }
-            steps {
-                script {
-                    updateCocos2BuildSettings(
-                unityProjectPath: params.UNITY_PROJECT_PATH,
-                cocosProjectPath: params.COCOS_PROJECT_PATH
-            )
-                }
-            }
-        }
-
-        stage('Setup Cocos 3 Native & Build Config') {
-            when {
-                expression {
-                    return params.GAME_ENGINE == 'unity' &&
-                   params.COCOS_VERSION == 'cocos3' &&
-                   params.ENVIRONMENT == 'Testing'
-                }
-            }
-            steps {
-                script {
-                    updateCocos3BuildSetup(
-                unityProjectPath: params.UNITY_PROJECT_PATH,
-                cocosProjectPath: params.COCOS_PROJECT_PATH,
-                pluginsProjectPath: params.PLUGINS_PROJECT_PATH
-            )
-                }
-            }
-        }
-
-        stage('Stabilize Project State') {
-            when {
-                expression {
-                    return params.GAME_ENGINE == 'unity' &&
-                   params.COCOS_VERSION == 'cocos3' &&
-                   params.ENVIRONMENT == 'Testing'
-                }
-            }
-            steps {
-                script {
-                    stabilizeCocosProject(
-                projectPath: params.COCOS_PROJECT_PATH,
-                cleanNative: false
-            )
-                }
-            }
-        }
-
-        stage('Setup Unity with Plugins') {
-            when {
-                expression {
-                    return params.GAME_ENGINE == 'unity' && params.ENVIRONMENT == 'Testing'
-                }
-            }
-            steps {
-                script {
-                    setupUnity(
-                unityProjectPath: params.UNITY_PROJECT_PATH,
-                pluginsProjectPath: params.PLUGINS_PROJECT_PATH,
-                sceneIndexToPatch: params.SCENE_INDEX_TO_PATCH
-            )
-                }
-            }
-        }
-
         stage('Save filenameMap.json') {
             when {
                 expression {
@@ -252,7 +257,7 @@ pipeline {
             }
         }
 
-        stage('Parallel Tasks') {
+        stage('Build Parallel Tasks') {
             parallel {
                 stage('Build Cocos Project') {
                     when {
