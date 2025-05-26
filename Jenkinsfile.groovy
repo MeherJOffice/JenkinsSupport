@@ -329,7 +329,7 @@ pipeline {
             }
             steps {
                 script {
-                    def copiedPath = copyCocosToJenkins(
+                    def copiedPath = copyCocosBuildToJenkins(
                 unityProjectPath: params.UNITY_PROJECT_PATH,
                 cocosProjectPath: params.COCOS_PROJECT_PATH,
                 cocosVersion: params.COCOS_VERSION
