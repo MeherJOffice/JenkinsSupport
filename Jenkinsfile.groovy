@@ -24,19 +24,18 @@ pipeline {
         stage('Check Cocos Creator Path') {
             when {
                 expression {
-                    return params.COCOS_VERSION == 'cocos2'
+                    return params.COCOS_VERSION == 'cocos2' || params.COCOS_VERSION == 'cocos3'
                 }
             }
             steps {
                 script {
-                    if (!env.COCOS_CREATOR_213_PATH?.trim()) {
-                        error '❌ Environment variable COCOS_CREATOR_213_PATH is not set. Please define it under Jenkins > Manage Jenkins > Global properties.'
-                    }
-
-                    echo "📌 Using Cocos Creator path: ${env.COCOS_CREATOR_213_PATH}"
+                    checkCocosCreatorPath(
+                cocosVersion: params.COCOS_VERSION
+            )
                 }
             }
         }
+
         stage('Reset Plugin Repo') {
             steps {
                 script {
@@ -316,71 +315,22 @@ pipeline {
             }
         }
 
-        stage('Copy Cocos Build to Jenkins Build Folder') {
-            when {
-                expression { params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2' }
-            }
-            steps {
-                script {
-                    def productName = sh(
-                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
-                returnStdout: true
-            ).trim()
-
-                    def cocosBuildFolder = "${params.COCOS_PROJECT_PATH}/build"
-                    def targetBuildFolder = "$HOME/jenkinsBuild/${productName}/CocosBuild"
-
-                    echo "📂 Copying Cocos build from ${cocosBuildFolder} to ${targetBuildFolder}"
-
-                    // Clean target and copy build
-                    sh """
-                rm -rf '${targetBuildFolder}'
-                mkdir -p '${targetBuildFolder}'
-                cp -R '${cocosBuildFolder}/.' '${targetBuildFolder}/'
-            """
-
-                    echo '✅ Cocos build copied successfully.'
-
-                    // Optional: delete the original Cocos build
-                    sh """
-                rm -rf '${cocosBuildFolder}'
-            """
-
-                    echo '🧹 Original Cocos build folder deleted to save space.'
-                }
-            }
-        }
         stage('Copy Cocos Project to Jenkins Build Folder') {
             when {
-                expression { params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos3' }
+                expression {
+                    return params.GAME_ENGINE == 'unity' &&
+                   (params.COCOS_VERSION == 'cocos2' || params.COCOS_VERSION == 'cocos3')
+                }
             }
             steps {
                 script {
-                    def productName = sh(
-                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
-                returnStdout: true
-            ).trim()
+                    def copiedPath = copyCocosToJenkins(
+                unityProjectPath: params.UNITY_PROJECT_PATH,
+                cocosProjectPath: params.COCOS_PROJECT_PATH,
+                cocosVersion: params.COCOS_VERSION
+            )
 
-                    def targetProjectFolder = "$HOME/jenkinsBuild/${productName}/CocosBuild"
-                    def sourceProjectFolder = params.COCOS_PROJECT_PATH
-
-                    echo "📂 Copying entire Cocos project from ${sourceProjectFolder} to ${targetProjectFolder}"
-
-                    // Copy full project
-                    sh """
-                mkdir -p '${targetProjectFolder}'
-                cp -R '${sourceProjectFolder}/.' '${targetProjectFolder}/'
-            """
-
-                    echo "🧹 Removing everything except 'build' and 'native' from ${targetProjectFolder}"
-
-                    // Clean all except 'build' and 'native'
-                    sh """
-                cd '${targetProjectFolder}'
-                find . -mindepth 1 -maxdepth 1 ! -name 'build' ! -name 'native' -exec rm -rf {} +
-            """
-
-                    echo "✅ Cleaned copied project folder; only 'build' and 'native' remain in ${targetProjectFolder}"
+                    echo "📦 Cocos project copied to: ${copiedPath}"
                 }
             }
         }
@@ -397,33 +347,9 @@ pipeline {
             }
             steps {
                 script {
-                    def productName = sh(
-                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
-                returnStdout: true
-            ).trim()
-
-                    def jenkinsfiles = "${env.WORKSPACE}/JenkinsFiles"
-
-                    def targetBuildFolder = "${env.HOME_DIR}/jenkinsBuild/${productName}"
-                    def patchScript = 'updateUnityXcodeProj.go'
-                    def privacyFile = 'PrivacyInfo.xcprivacy'
-
-                    sh """
-                set +e
-                mkdir -p '${targetBuildFolder}'
-                cp '${jenkinsfiles}/Golang/${patchScript}' '${targetBuildFolder}/'
-                cp '${jenkinsfiles}/${privacyFile}' '${targetBuildFolder}/'
-                cd '${targetBuildFolder}'
-                go mod init patchproject
-                go get howett.net/plist
-                go build -o patch_unity_xcode ${patchScript}
-                ./patch_unity_xcode
-                BUILD_RESULT=\$?
-                echo '🔍 Dumping log before cleanup:'
-                cat /tmp/unity_xcode_patch.log || echo '⚠️ No log found.'
-                rm -f ${patchScript} ${privacyFile} patch_unity_xcode go.mod go.sum
-                exit \$BUILD_RESULT
-            """
+                    patchUnityXcodeProject(
+                unityProjectPath: params.UNITY_PROJECT_PATH
+            )
                 }
             }
         }
@@ -437,160 +363,47 @@ pipeline {
             }
             steps {
                 script {
-                    echo '🔎 Searching for Python virtual environment...'
-
-                    def venvPath = sh(
-                script: "find \$HOME/.venvs -name 'pbxproj-env' -type d | head -n 1",
-                returnStdout: true
-            ).trim()
-
-                    if (!venvPath) {
-                        error "❌ Virtual environment 'pbxproj-env' not found!"
-                    }
-                    echo "✅ Found VENV at: ${venvPath}"
-
-                    def pythonfiles = "${env.WORKSPACE}/JenkinsFiles/Python"
-                    def sourcePyScript = "${pythonfiles}/SetupXcodeWorkspace.py"
-                    def targetFolder = "${params.UNITY_PROJECT_PATH}/unityBuild"
-                    def copiedScript = "${targetFolder}/SetupXcodeWorkspace.py"
-
-                    echo "📁 Copying SetupXcodeWorkspace.py to: ${targetFolder}"
-                    sh """
-                mkdir -p '${targetFolder}'
-                cp '${sourcePyScript}' '${copiedScript}'
-            """
-                    echo '✅ Script copied.'
-
-                    def productName = sh(
-                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
-                returnStdout: true
-            ).trim()
-
-                    def sanitizedName = productName.replaceAll(/[^a-zA-Z0-9]/, '')
-                    def targetBuildFolder = "$HOME/jenkinsBuild/${productName}"
-
-                    def unityXcodeProj = "${targetBuildFolder}/UnityBuild/Unity-iPhone.xcodeproj"
-
-                    def cocosXcodeProj = params.COCOS_VERSION == 'cocos2'
-                    ? "${targetBuildFolder}/CocosBuild/jsb-default/frameworks/runtime-src/proj.ios_mac/${sanitizedName}.xcodeproj"
-                    : "${targetBuildFolder}/CocosBuild/${params.COCOS_PROJECT_PATH.tokenize('/').last()}/build/ios/proj/${sanitizedName}.xcodeproj"
-
-                    if (!fileExists(unityXcodeProj)) {
-                        error "❌ Unity Xcode project not found at: ${unityXcodeProj}"
-                    }
-                    if (!fileExists(cocosXcodeProj)) {
-                        error "❌ Cocos Xcode project not found at: ${cocosXcodeProj}"
-                    }
-
-                    echo '🚀 Running SetupXcodeWorkspace.py...'
-                    sh """
-                source '${venvPath}/bin/activate' && \
-                python3 '${copiedScript}' '${unityXcodeProj}' '${cocosXcodeProj}'
-            """
-
-                    // 🔥 Cleanup
-                    sh "rm -f '${copiedScript}'"
-                    echo '🧹 Cleanup: Deleted SetupXcodeWorkspace.py'
-
-                    echo '🎉 Workspace with Unity and Cocos projects created successfully!'
+                    setupXcodeWorkspace(
+                unityProjectPath: params.UNITY_PROJECT_PATH,
+                cocosProjectPath: params.COCOS_PROJECT_PATH,
+                cocosVersion: params.COCOS_VERSION
+            )
                 }
             }
         }
 
         stage('Replace Cocos iOS Icons with Unity Icons') {
             when {
-                expression { params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2' }
-            }
-            steps {
-                script {
-                    echo '🔎 Reading product name from Unity settings...'
-
-                    def productName = sh(
-                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
-                returnStdout: true
-            ).trim()
-
-                    def sanitizedProductName = productName.replaceAll(/[^A-Za-z0-9]/, '')
-
-                    def unityIconsPath = "${env.HOME}/jenkinsBuild/${productName}/UnityBuild/Unity-iPhone/Images.xcassets/AppIcon.appiconset"
-                    def cocosIconsPath = "${env.HOME}/jenkinsBuild/${productName}/CocosBuild/jsb-default/frameworks/runtime-src/proj.ios_mac/ios/Images.xcassets/AppIcon.appiconset"
-
-                    if (!fileExists(unityIconsPath)) {
-                        error "❌ Unity AppIcon path not found: ${unityIconsPath}"
-                    }
-
-                    echo "🔁 Replacing Cocos icons using Unity's icon set..."
-                    sh """
-                rm -rf "${cocosIconsPath}"
-                cp -R "${unityIconsPath}" "${cocosIconsPath}"
-            """
-
-                    echo '✅ Cocos iOS app icons successfully replaced!'
-                }
-            }
-        }
-        stage('Replace Cocos 3 iOS Icons with Unity Icons') {
-            when {
                 expression {
-                    return params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos3'
+                    return params.GAME_ENGINE == 'unity' &&
+                   (params.COCOS_VERSION == 'cocos2' || params.COCOS_VERSION == 'cocos3')
                 }
             }
             steps {
                 script {
-                    echo '🔎 Reading product name from Unity settings...'
-
-                    def productName = sh(
-                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
-                returnStdout: true
-            ).trim()
-
-                    def sanitizedProductName = productName.replaceAll(/[^A-Za-z0-9]/, '')
-
-                    def unityIconsPath = "${env.HOME}/jenkinsBuild/${productName}/UnityBuild/Unity-iPhone/Images.xcassets/AppIcon.appiconset"
-        def cocosIconsPath = "${targetBuildFolder}/CocosBuild/${params.COCOS_PROJECT_PATH.tokenize('/').last()}/native/engine/ios/Images.xcassets/AppIcon.appiconset"
-
-
-                    if (!fileExists(unityIconsPath)) {
-                        error "❌ Unity AppIcon path not found: ${unityIconsPath}"
-                    }
-
-                    echo "🔁 Replacing Cocos 3 icons using Unity's icon set..."
-                    sh """
-                rm -rf '${cocosIconsPath}'
-                mkdir -p \$(dirname '${cocosIconsPath}')
-                cp -R '${unityIconsPath}' '${cocosIconsPath}'
-            """
-
-                    echo '✅ Cocos 3 iOS app icons successfully replaced!'
+                    replaceCocosIconsWithUnity(
+                unityProjectPath: params.UNITY_PROJECT_PATH,
+                cocosVersion: params.COCOS_VERSION,
+                targetBuildFolder: "$HOME/jenkinsBuild/${params.PRODUCT_NAME}" // optional override
+            )
                 }
             }
         }
+
         stage('Copy functionsMap.json to Cocos Build') {
             when {
                 expression {
                     return params.GAME_ENGINE == 'unity' &&
-                    (params.COCOS_VERSION == 'cocos2' || params.COCOS_VERSION == 'cocos3') &&
+                   (params.COCOS_VERSION == 'cocos2' || params.COCOS_VERSION == 'cocos3') &&
                    params.ENVIRONMENT == 'Testing'
                 }
             }
             steps {
                 script {
-                    def productName = sh(
-                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
-                returnStdout: true
-            ).trim()
-
-                    def buildpath = "$HOME/jenkinsBuild/${productName}"
-                    def sourceJsonPath = "${params.PLUGINS_PROJECT_PATH}/functionsMap.json"
-                    def targetJsonPath = "${buildpath}/functionsMap.json"
-
-                    if (!fileExists(sourceJsonPath)) {
-                        error "❌ Missing functionsMap.json at: ${sourceJsonPath}"
-                    }
-
-                    echo "📁 Copying functionsMap.json to ${targetJsonPath}"
-                    sh "cp '${sourceJsonPath}' '${targetJsonPath}'"
-                    echo '✅ functionsMap.json copied successfully.'
+                    copyFunctionsMapToCocosBuild(
+                unityProjectPath: params.UNITY_PROJECT_PATH,
+                pluginsProjectPath: params.PLUGINS_PROJECT_PATH
+            )
                 }
             }
         }
@@ -598,26 +411,9 @@ pipeline {
         stage('📂 Open Game Build Folder') {
             steps {
                 script {
-                    // Get the user's home directory dynamically
-                    def userHome = sh(
-                script: "echo \$HOME",
-                returnStdout: true
-            ).trim()
-
-                    // Extract product name (unsanitized) — as used in actual build folder naming
-                    def productName = sh(
-                script: "grep 'productName:' '${params.UNITY_PROJECT_PATH}/ProjectSettings/ProjectSettings.asset' | sed 's/^[^:]*: *//'",
-                returnStdout: true
-            ).trim()
-
-                    // Final folder path where all builds and WS were placed
-                    def buildRootPath = "${userHome}/jenkinsBuild/${productName}"
-
-                    echo "📂 Opening game build folder: ${buildRootPath}"
-
-                    sh """
-                open "${buildRootPath}"
-            """
+                    openGameBuildFolder(
+                unityProjectPath: params.UNITY_PROJECT_PATH
+            )
                 }
             }
         }
