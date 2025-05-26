@@ -387,9 +387,8 @@ pipeline {
                 script {
                     replaceCocosIconsWithUnity(
                 unityProjectPath: params.UNITY_PROJECT_PATH,
-                cocosVersion: params.COCOS_VERSION,
-                targetBuildFolder: "$HOME/jenkinsBuild/${params.PRODUCT_NAME}" // optional override
-            )
+                cocosVersion: params.COCOS_VERSION
+                )
                 }
             }
         }
