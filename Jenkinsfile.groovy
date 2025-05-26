@@ -263,8 +263,7 @@ pipeline {
                     when {
                         expression {
                             return params.GAME_ENGINE == 'unity' &&
-                           (params.COCOS_VERSION == 'cocos2' || params.COCOS_VERSION == 'cocos3') &&
-                           params.ENVIRONMENT == 'Testing'
+                           (params.COCOS_VERSION == 'cocos2' || params.COCOS_VERSION == 'cocos3')
                         }
                     }
                     steps {
