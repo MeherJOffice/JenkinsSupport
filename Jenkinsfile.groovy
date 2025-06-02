@@ -203,7 +203,7 @@ pipeline {
             steps {
                 script {
                     openGameBuildFolder(
-                unityProjectPath: params.UNITY_PROJECT_PATH
+                cocosProjectPath: params.COCOS_PROJECT_PATH
             )
                 }
             }
