@@ -85,7 +85,7 @@ pipeline {
             }
         }
 
-        stage('Build Cocos Project') {
+        stage('Build Cocos Project meta') {
             when {
                 expression {
                     return params.COCOS_VERSION == 'cocos2' &&
