@@ -48,6 +48,25 @@ pipeline {
             }
         }
 
+        stage('📦 Install NPM Dependencies in Plugins') {
+            steps {
+                script {
+                    def pluginsPath = params.PLUGINS_PROJECT_PATH
+
+                    if (!pluginsPath) {
+                        error "❌ 'PLUGINS_PROJECT_PATH' is required"
+                    }
+
+                    echo "📂 Installing NPM packages in: ${pluginsPath}"
+
+                    dir(pluginsPath) {
+                        sh 'npm install'
+                    }
+
+                    echo '✅ NPM dependencies installed successfully in plugins.'
+                }
+            }
+        }
         stage('Preprocess CheckStatus.ts') {
             when {
                 expression {
