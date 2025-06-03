@@ -15,7 +15,7 @@ pipeline {
     }
 
     environment {
-        PATH = "/usr/local/go/bin:${env.PATH}"
+        PATH = "/opt/homebrew/bin:/usr/local/go/bin:${env.PATH}" 
         HOME_DIR = "${env.HOME}"
         COCOS_CREATOR_213_PATH = "${COCOS_CREATOR_213_PATH}"
         COCOS_CREATOR_373_PATH = "${COCOS_CREATOR_373_PATH}"
