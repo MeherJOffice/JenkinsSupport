@@ -47,7 +47,27 @@ pipeline {
                 }
             }
         }
+        stage('🗑️ Clean Cocos Folders') {
+            when {
+                expression {
+                    return params.COCOS_VERSION == 'cocos2' &&
+                   params.ENVIRONMENT == 'Testing'
+                }
+            }
+            steps {
+                script {
+                    def cocosProjectPath = params.COCOS_PROJECT_PATH
 
+                    echo "🧹 Deleting folders from: ${cocosProjectPath}"
+
+                    sh """
+                rm -rf '${cocosProjectPath}/build-templates'
+                rm -rf '${cocosProjectPath}/node_modules'
+                echo "✅ Deleted build-templates and node_modules from Cocos project"
+            """
+                }
+            }
+        }
         stage('📦 Install NPM Dependencies in Plugins') {
             steps {
                 script {
