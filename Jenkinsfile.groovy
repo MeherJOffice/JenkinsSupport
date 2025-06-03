@@ -291,19 +291,6 @@ pipeline {
             }
         }
 
-        stage('Run changeLibCC Script After Cocos Build') {
-            when {
-                expression { params.GAME_ENGINE == 'unity' && params.COCOS_VERSION == 'cocos2' }
-            }
-            steps {
-                script {
-                    runChangeLibScript(
-                cocosProjectPath: params.COCOS_PROJECT_PATH
-            )
-                }
-            }
-        }
-
         stage('Cleanup Unity Editor Scripts') {
             when {
                 expression {
