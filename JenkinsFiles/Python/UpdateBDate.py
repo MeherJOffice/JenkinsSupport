@@ -1,21 +1,20 @@
 import sys
 import re
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 if len(sys.argv) < 3:
-    print("❌ Usage: python3 UpdateBDate.py /path/to/CheckStatus.ts 'YYYY-MM-DD'")
+    print("❌ Usage: python3 UpdateBDate.py /path/to/CheckStatus.ts isTesting")
     sys.exit(1)
 
 ts_path = sys.argv[1]
-new_date = sys.argv[2]
+is_testing_flag = sys.argv[2].lower() == 'true'
 
-# Validate date format
-try:
-    datetime.strptime(new_date, '%Y-%m-%d')
-except ValueError:
-    print("❌ Invalid date format. Use YYYY-MM-DD")
-    sys.exit(1)
+# Calculate the date
+if is_testing_flag:
+    new_date = (datetime.today() - timedelta(days=7)).strftime('%Y-%m-%d')
+else:
+    new_date = datetime.today().strftime('%Y-%m-%d')
 
 if not os.path.isfile(ts_path):
     print(f"❌ File not found at: {ts_path}")
