@@ -5,7 +5,7 @@ pipeline {
     parameters {
         string(name: 'PLUGINS_PROJECT_PATH', defaultValue: '/Users/meher/Documents/GitHub/UpStoreTools', description: 'Local path to Plugins repo')
         string(name: 'COCOS_PROJECT_PATH', defaultValue: '/Users/meher/Documents/GitHub/CocosProjectsSDK/TestProject', description: 'Cocos project path')
-        string(name: 'COCOS_OVERRIDE_VALUE' , description: 'Override value for Cocos')
+        text(name: 'COCOS_OVERRIDE_VALUE', description: 'Override value for Cocos')
         choice(name: 'COCOS_VERSION', choices: ['cocos2', 'cocos3'], description: 'Cocos version')
         choice(name: 'ENVIRONMENT', choices: ['Testing', 'Production'], description: 'Select build mode: Testing uses last month’s date, Production uses today’s date')
     }
