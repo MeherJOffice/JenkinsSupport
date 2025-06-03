@@ -2,7 +2,7 @@ import sys
 import re
 import os
 
-if len(sys.argv) < 4:
+if len(sys.argv) < 3:
     print("❌ Usage: python3 PreprocessCheckStatus.py /path/to/CheckStatus.ts override_link testing_flag")
     sys.exit(1)
 
