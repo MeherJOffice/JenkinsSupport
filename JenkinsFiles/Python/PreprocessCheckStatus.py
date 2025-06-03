@@ -1,40 +1,36 @@
 import sys
 import re
 import os
-from datetime import datetime
 
-if len(sys.argv) < 3:
-    print("❌ Usage: python3 UpdateBDate.py /path/to/CheckStatus.ts 'YYYY-MM-DD'")
+if len(sys.argv) < 4:
+    print("❌ Usage: python3 PreprocessCheckStatus.py /path/to/CheckStatus.ts override_link testing_flag")
     sys.exit(1)
 
 ts_path = sys.argv[1]
-new_date = sys.argv[2]
-
-# Validate date format
-try:
-    datetime.strptime(new_date, '%Y-%m-%d')
-except ValueError:
-    print("❌ Invalid date format. Use YYYY-MM-DD")
-    sys.exit(1)
+override_block = sys.argv[2]  # This should be the full block like: [ "45", "52", "Test" ]
 
 if not os.path.isfile(ts_path):
-    print(f"❌ File not found at: {ts_path}")
+    print(f"❌ CheckStatus.ts not found at {ts_path}")
     sys.exit(1)
 
-# Read the file
+# Read the original file
 with open(ts_path, 'r', encoding='utf-8') as f:
     content = f.read()
 
-# Replace bdate assignment
+# Rebuild and inject the replacement block
+new_block = f'public static LIST_LINK_CONFIG = {override_block};'
+
+# Replace the entire block
 content, count = re.subn(
-    r"(private\s+bdate\s*=\s*')[^']+(';)",
-    lambda m: f"{m.group(1)}{new_date}{m.group(2)}",
+    r'public static LIST_LINK_CONFIG\s*=\s*\[[\s\S]*?\];',
+    new_block,
     content
 )
 
 if count == 0:
-    print("⚠️ No bdate property found. No changes made.")
+    print("⚠️ LIST_LINK_CONFIG not found. No changes made.")
 else:
+    # Write back to file
     with open(ts_path, 'w', encoding='utf-8') as f:
         f.write(content)
-    print(f"✅ bdate updated to {new_date}")
+    print("✅ LIST_LINK_CONFIG replaced successfully.")
