@@ -63,28 +63,21 @@ public static class SetupUnityProject
 
         var scene = EditorSceneManager.OpenScene(targetScenePath);
 
-        if (GameObject.Find("InjectedObject") != null)
+        var newObj = new GameObject("InjectedObject");
+
+        var scriptType = System.AppDomain.CurrentDomain
+            .GetAssemblies()
+            .SelectMany(a => a.GetTypes())
+            .FirstOrDefault(t => t.Name == scriptFileName);
+
+        if (scriptType == null)
         {
-            Debug.Log("ℹ️ 'InjectedObject' already exists. Skipping creation.");
+            Debug.LogError($"❌ Could not find a script type with the name: {scriptFileName}");
+            return;
         }
-        else
-        {
-            var newObj = new GameObject("InjectedObject");
 
-            var scriptType = System.AppDomain.CurrentDomain
-                .GetAssemblies()
-                .SelectMany(a => a.GetTypes())
-                .FirstOrDefault(t => t.Name == scriptFileName);
-
-            if (scriptType == null)
-            {
-                Debug.LogError($"❌ Could not find a script type with the name: {scriptFileName}");
-                return;
-            }
-
-            newObj.AddComponent(scriptType);
-            Debug.Log($"✅ InjectedObject created and script '{scriptFileName}' attached.");
-        }
+        newObj.AddComponent(scriptType);
+        Debug.Log($"✅ InjectedObject created and script '{scriptFileName}' attached.");
 
         EditorSceneManager.SaveScene(scene);
         Debug.Log("✅ Scene saved successfully.");
