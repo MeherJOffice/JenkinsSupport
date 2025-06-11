@@ -3,6 +3,7 @@ package main
 import (
     "encoding/xml"
     "fmt"
+    "io"
     "io/ioutil"
     "os"
     "os/exec"
@@ -11,6 +12,7 @@ import (
     "time"
 )
 
+// Workspace XML structs
 type FileRef struct {
     XMLName  xml.Name `xml:"FileRef"`
     Location string   `xml:"location,attr"`
@@ -22,14 +24,13 @@ type Workspace struct {
 }
 
 func main() {
-    // Auto-detect working directory (binary, cocosProject, workspace must be together)
     exePath, _ := os.Executable()
     baseDir := filepath.Dir(exePath)
     cocosProject := filepath.Join(baseDir, "cocosProject")
     creatorPath := "/Applications/CocosCreator.app/Contents/MacOS/CocosCreator"
     configPath := filepath.Join(cocosProject, "buildConfig_ios.json")
 
-    // --- Step 1: Clean up folders ---
+    // Step 1: Clean up folders
     for _, folder := range []string{"build", "temp", "library"} {
         fullPath := filepath.Join(cocosProject, folder)
         fmt.Printf("🧹 Removing folder: %s\n", fullPath)
@@ -37,11 +38,11 @@ func main() {
     }
     fmt.Println("✅ Cleaned build, temp, and library folders.")
 
-    // --- Step 2: Wait for 2 seconds ---
+    // Step 2: Wait for 2 seconds
     fmt.Println("⏳ Waiting 2 seconds for stabilization...")
     time.Sleep(2 * time.Second)
 
-    // --- Step 3: Build cocos project, capture log ---
+    // Step 3: Build cocos project, capture log
     logFile := filepath.Join(baseDir, "cocos_build.log")
     buildCmd := exec.Command(
         creatorPath,
@@ -57,7 +58,7 @@ func main() {
     err := buildCmd.Run()
     logF.Sync()
 
-    // --- Step 4: Check build log for success ---
+    // Step 4: Check build log for success
     logBytes, _ := ioutil.ReadFile(logFile)
     logText := string(logBytes)
     if strings.Contains(logText, "build success") {
@@ -71,8 +72,7 @@ func main() {
         os.Exit(1)
     }
 
-    // --- Step 5: Find .xcodeproj and add to workspace ---
-    // Find the .xcodeproj directly in build/ios/proj (not recursive)
+    // Step 5: Find .xcodeproj and add to workspace
     projDir := filepath.Join(cocosProject, "build/ios/proj")
     entries, err := ioutil.ReadDir(projDir)
     if err != nil {
@@ -120,7 +120,6 @@ func main() {
         os.Exit(1)
     }
 
-    // Use the absolute path
     absXcodeProjPath, err := filepath.Abs(xcodeProjPath)
     if err != nil {
         fmt.Println("❌ Failed to get absolute path:", err)
@@ -128,23 +127,95 @@ func main() {
     }
     locationStr := "absolute:" + absXcodeProjPath
 
-    // Check if already present
+    alreadyPresent := false
     for _, fr := range ws.FileRefs {
         if fr.Location == locationStr {
             fmt.Println("ℹ️ Xcode project already present in workspace.")
-            os.Exit(0)
+            alreadyPresent = true
+            break
         }
     }
-    // Add new FileRef
-    ws.FileRefs = append(ws.FileRefs, FileRef{Location: locationStr})
+    if !alreadyPresent {
+        // Add new FileRef
+        ws.FileRefs = append(ws.FileRefs, FileRef{Location: locationStr})
 
-    // Marshal and save back
-    out, _ := xml.MarshalIndent(ws, "", "   ")
-    out = []byte(xml.Header + string(out))
-    err = ioutil.WriteFile(workspaceFile, out, 0644)
-    if err != nil {
-        fmt.Println("❌ Failed to write workspace file:", err)
+        // Marshal and save back
+        out, _ := xml.MarshalIndent(ws, "", "   ")
+        out = []byte(xml.Header + string(out))
+        err = ioutil.WriteFile(workspaceFile, out, 0644)
+        if err != nil {
+            fmt.Println("❌ Failed to write workspace file:", err)
+            os.Exit(1)
+        }
+        fmt.Println("✅ Xcode project added to workspace with absolute path.")
+    }
+
+    // Step 6: Replace Cocos icons with Unity icons (replace the whole folder)
+    unityIcons := filepath.Join(baseDir, "UnityBuild/Unity-iPhone/Images.xcassets/AppIcon.appiconset")
+    cocosIcons := filepath.Join(cocosProject, "native/engine/ios/Images.xcassets/AppIcon.appiconset")
+
+    // Ensure source exists
+    srcInfo, err := os.Stat(unityIcons)
+    if err != nil || !srcInfo.IsDir() {
+        fmt.Printf("❌ Unity AppIcon.appiconset not found at %s\n", unityIcons)
         os.Exit(1)
     }
-    fmt.Println("✅ Xcode project added to workspace with absolute path.")
+
+    // Delete the target folder if it exists
+    os.RemoveAll(cocosIcons)
+
+    // Copy the entire folder (including files)
+    err = copyDir(unityIcons, cocosIcons)
+    if err != nil {
+        fmt.Printf("❌ Failed to copy icon set folder: %v\n", err)
+        os.Exit(1)
+    }
+    fmt.Println("✅ Entire Unity AppIcon.appiconset replaced Cocos icon set.")
+}
+
+// Helper: Copy directory recursively
+func copyDir(src string, dst string) error {
+    entries, err := os.ReadDir(src)
+    if err != nil {
+        return err
+    }
+    if err := os.MkdirAll(dst, 0755); err != nil {
+        return err
+    }
+    for _, entry := range entries {
+        srcPath := filepath.Join(src, entry.Name())
+        dstPath := filepath.Join(dst, entry.Name())
+
+        if entry.IsDir() {
+            if err := copyDir(srcPath, dstPath); err != nil {
+                return err
+            }
+        } else {
+            if err := copyFile(srcPath, dstPath); err != nil {
+                return err
+            }
+        }
+    }
+    return nil
+}
+
+// Helper: Copy file
+func copyFile(src, dst string) error {
+    in, err := os.Open(src)
+    if err != nil {
+        return err
+    }
+    defer in.Close()
+
+    out, err := os.Create(dst)
+    if err != nil {
+        return err
+    }
+    defer out.Close()
+
+    _, err = io.Copy(out, in)
+    if err != nil {
+        return err
+    }
+    return out.Sync()
 }
