@@ -27,7 +27,7 @@ func main() {
     exePath, _ := os.Executable()
     baseDir := filepath.Dir(exePath)
     cocosProject := filepath.Join(baseDir, "cocosProject")
-    creatorPath := "/Applications/CocosCreator.app/Contents/MacOS/CocosCreator"
+    creatorPath := "/Applications/Cocos/Creator/3.7.3/CocosCreator.app/Contents/MacOS"
     configPath := filepath.Join(cocosProject, "buildConfig_ios.json")
 
     // Step 1: Clean up folders
@@ -39,7 +39,6 @@ func main() {
     fmt.Println("✅ Cleaned build, temp, and library folders.")
 
     // Step 2: Wait for 2 seconds
-    fmt.Println("⏳ Waiting 2 seconds for stabilization...")
     time.Sleep(2 * time.Second)
 
     // Step 3: Build cocos project, capture log
@@ -130,7 +129,7 @@ func main() {
     alreadyPresent := false
     for _, fr := range ws.FileRefs {
         if fr.Location == locationStr {
-            fmt.Println("ℹ️ Xcode project already present in workspace.")
+            fmt.Println("Xcode project already present in workspace.")
             alreadyPresent = true
             break
         }
