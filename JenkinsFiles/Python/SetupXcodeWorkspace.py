@@ -14,7 +14,7 @@ if not os.path.isdir(unity_xcodeproj):
     print(f"\u274c Unity pbxproj not found: {unity_xcodeproj}")
     sys.exit(1)
 
-if not os.path.isdir(cocos_xcodeproj):
+if cocos_xcodeproj and not os.path.isdir(cocos_xcodeproj):
     print(f"\u274c Cocos pbxproj not found: {cocos_xcodeproj}")
     sys.exit(1)
 
@@ -38,7 +38,8 @@ os.makedirs(os.path.dirname(workspace_file), exist_ok=True)
 # --------- GENERATE WORKSPACE XML ---------
 workspace_xml = ET.Element('Workspace', version="1.0")
 ET.SubElement(workspace_xml, 'FileRef', location=f"absolute:{os.path.abspath(unity_xcodeproj)}")
-ET.SubElement(workspace_xml, 'FileRef', location=f"absolute:{os.path.abspath(cocos_xcodeproj)}")
+if cocos_xcodeproj:
+    ET.SubElement(workspace_xml, 'FileRef', location=f"absolute:{os.path.abspath(cocos_xcodeproj)}")
 
 # --------- WRITE TO FILE ---------
 tree = ET.ElementTree(workspace_xml)
@@ -46,4 +47,4 @@ ET.indent(tree, space="   ", level=0)
 with open(workspace_file, 'wb') as f:
     tree.write(f, encoding='utf-8', xml_declaration=True)
 
-print("\u2705 Workspace created with Unity and Cocos projects included.")
+print("\u2705 Workspace created with Unity and Cocos projects included." if cocos_xcodeproj else "\u2705 Workspace created with Unity project only.")
