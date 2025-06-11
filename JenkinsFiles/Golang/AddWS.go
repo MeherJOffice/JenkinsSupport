@@ -1,100 +1,80 @@
 package main
 
 import (
-    "encoding/xml"
     "fmt"
-    "io/ioutil"
     "os"
     "path/filepath"
-    "strings"
+    "io"
 )
 
-type FileRef struct {
-    XMLName  xml.Name `xml:"FileRef"`
-    Location string   `xml:"location,attr"`
-}
-type Workspace struct {
-    XMLName  xml.Name  `xml:"Workspace"`
-    Version  string    `xml:"version,attr"`
-    FileRefs []FileRef `xml:"FileRef"`
-}
-
 func main() {
-    baseDir := "/Users/meher/jenkinsBuild/Fact or Fib! copy"
+    exePath, _ := os.Executable()
+    baseDir := filepath.Dir(exePath)
 
-    // Find the .xcodeproj directly in projDir (not recursive)
-    projDir := filepath.Join(baseDir, "CocosProject/build/ios/proj")
-    entries, err := ioutil.ReadDir(projDir)
-    if err != nil {
-        fmt.Printf("❌ Failed to read dir %s: %v\n", projDir, err)
+    unityIcons := filepath.Join(baseDir, "UnityBuild/Unity-iPhone/Images.xcassets/AppIcon.appiconset")
+    cocosIcons := filepath.Join(baseDir, "cocosProject/native/engine/ios/Images.xcassets/AppIcon.appiconset")
+
+    // Ensure source exists
+    srcInfo, err := os.Stat(unityIcons)
+    if err != nil || !srcInfo.IsDir() {
+        fmt.Printf("❌ Unity AppIcon.appiconset not found at %s\n", unityIcons)
         os.Exit(1)
     }
-    xcodeProjPath := ""
+
+    // Delete the target folder if it exists
+    os.RemoveAll(cocosIcons)
+
+    // Copy the entire folder (including files)
+    err = copyDir(unityIcons, cocosIcons)
+    if err != nil {
+        fmt.Printf("❌ Failed to copy icon set folder: %v\n", err)
+        os.Exit(1)
+    }
+    fmt.Println("✅ Entire Unity AppIcon.appiconset replaced Cocos icon set.")
+}
+
+func copyDir(src string, dst string) error {
+    entries, err := os.ReadDir(src)
+    if err != nil {
+        return err
+    }
+    if err := os.MkdirAll(dst, 0755); err != nil {
+        return err
+    }
     for _, entry := range entries {
-        if entry.IsDir() && strings.HasSuffix(entry.Name(), ".xcodeproj") {
-            xcodeProjPath = filepath.Join(projDir, entry.Name())
-            break
+        srcPath := filepath.Join(src, entry.Name())
+        dstPath := filepath.Join(dst, entry.Name())
+
+        if entry.IsDir() {
+            if err := copyDir(srcPath, dstPath); err != nil {
+                return err
+            }
+        } else {
+            if err := copyFile(srcPath, dstPath); err != nil {
+                return err
+            }
         }
     }
-    if xcodeProjPath == "" {
-        fmt.Println("❌ No .xcodeproj found directly in", projDir)
-        os.Exit(1)
-    }
-    fmt.Println("✅ Found Xcode project:", xcodeProjPath)
+    return nil
+}
 
-    // Find the only .xcworkspace file under XcodeWorkspace (recursive is fine)
-    wsDir := filepath.Join(baseDir, "XcodeWorkspace")
-    var workspaceFile string
-    filepath.Walk(wsDir, func(path string, info os.FileInfo, err error) error {
-        if err == nil && strings.HasSuffix(info.Name(), ".xcworkspace") {
-            workspaceFile = filepath.Join(path, "contents.xcworkspacedata")
-            return filepath.SkipDir
-        }
-        return nil
-    })
-    if workspaceFile == "" {
-        fmt.Println("❌ No .xcworkspace file found.")
-        os.Exit(1)
-    }
-    fmt.Println("✅ Found workspace file:", workspaceFile)
-
-    // Load and parse workspace XML
-    data, err := ioutil.ReadFile(workspaceFile)
+func copyFile(src, dst string) error {
+    in, err := os.Open(src)
     if err != nil {
-        fmt.Println("❌ Failed to read workspace file:", err)
-        os.Exit(1)
+        return err
     }
-    var ws Workspace
-    if err := xml.Unmarshal(data, &ws); err != nil {
-        fmt.Println("❌ Failed to parse workspace XML:", err)
-        os.Exit(1)
-    }
+    defer in.Close()
 
-    // Use the absolute path
-    absXcodeProjPath, err := filepath.Abs(xcodeProjPath)
+    out, err := os.Create(dst)
     if err != nil {
-        fmt.Println("❌ Failed to get absolute path:", err)
-        os.Exit(1)
+        return err
     }
-    locationStr := "absolute:" + absXcodeProjPath
+    defer out.Close()
 
-    // Check if already present
-    for _, fr := range ws.FileRefs {
-        if fr.Location == locationStr {
-            fmt.Println("ℹ️ Xcode project already present in workspace.")
-            os.Exit(0)
-        }
-    }
-    // Add new FileRef
-    ws.FileRefs = append(ws.FileRefs, FileRef{Location: locationStr})
-
-    // Marshal and save back
-    out, _ := xml.MarshalIndent(ws, "", "   ")
-    out = []byte(xml.Header + string(out))
-    err = ioutil.WriteFile(workspaceFile, out, 0644)
+    _, err = io.Copy(out, in)
     if err != nil {
-        fmt.Println("❌ Failed to write workspace file:", err)
-        os.Exit(1)
+        return err
     }
-    fmt.Println("✅ Xcode project added to workspace with absolute path.")
+
+    return out.Sync()
 }
