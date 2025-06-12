@@ -27,7 +27,7 @@ func main() {
     exePath, _ := os.Executable()
     baseDir := filepath.Dir(exePath)
     cocosProject := filepath.Join(baseDir, "cocosProject")
-    creatorPath := "/Applications/Cocos/Creator/3.7.3/CocosCreator.app/Contents/MacOS"
+    creatorPath := "/Applications/Cocos/Creator/3.7.3/CocosCreator.app/Contents/MacOS/CocosCreator"
     configPath := filepath.Join(cocosProject, "buildConfig_ios.json")
 
     // Step 1: Clean up folders
